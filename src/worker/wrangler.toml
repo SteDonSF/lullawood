@@ -1,0 +1,11 @@
+name = "lullawood-nightly"
+main = "nightly.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Run hourly; the worker picks children whose local bedtime falls in the window.
+[triggers]
+crons = ["0 * * * *"]
+
+# Secrets via `wrangler secret put` (do not commit):
+# ANTHROPIC_API_KEY, ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, RESEND_API_KEY, DATABASE_URL

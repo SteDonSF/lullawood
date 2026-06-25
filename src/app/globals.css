@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+html { scroll-behavior: smooth; }
+
+body {
+  @apply bg-parchment text-ink font-body antialiased;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"),
+    theme('backgroundImage.parchment-grad');
+  background-attachment: fixed;
+}
+
+.h-display { @apply font-display tracking-tight; }
+.wordmark { @apply font-title uppercase; letter-spacing: 0.12em; }
+.eyebrow-caps { @apply font-title uppercase; letter-spacing: 0.18em; }
+
+.rule-gold {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, theme('colors.gold.deep'), transparent);
+  opacity: .55;
+}
+
+/* the dark "night window" — always dark (dusty-blue + forest, amber glow) */
+.night-panel {
+  background:
+    radial-gradient(360px 200px at 70% 0%, rgba(210,142,40,.2), transparent 70%),
+    linear-gradient(180deg, #233B40, #16241E);
+  @apply text-cream-paper shadow-night;
+  border: 1px solid #102019;
+}
+
+@keyframes lw-pulse { 0%,100%{transform:scale(.92);opacity:.8} 50%{transform:scale(1.06);opacity:1} }
+@keyframes lw-fade { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+@keyframes lw-blink { 50%{opacity:0} }
+.animate-pulse-moon { animation: lw-pulse 1.6s ease-in-out infinite; }
+.animate-fade { animation: lw-fade .5s ease; }
+.caret { display:inline-block;width:8px;height:18px;margin-left:2px;vertical-align:-3px;border-radius:2px;
+  background: theme('colors.gold.DEFAULT'); animation: lw-blink 1s steps(2) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .animate-pulse-moon, .caret { animation: none; }
+}

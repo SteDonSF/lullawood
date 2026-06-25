@@ -1,0 +1,39 @@
+{
+  "name": "lullawood",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lullawood — personalized nightly bedtime stories for children.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "cf:build": "npx @cloudflare/next-on-pages",
+    "worker:dev": "wrangler dev src/worker/nightly.ts --config src/worker/wrangler.toml",
+    "worker:deploy": "wrangler deploy src/worker/nightly.ts --config src/worker/wrangler.toml"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.3",
+    "@neondatabase/serverless": "^0.9.5",
+    "drizzle-orm": "^0.33.0",
+    "next": "14.2.13",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "resend": "^4.0.0",
+    "stripe": "^16.12.0"
+  },
+  "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.2",
+    "@types/node": "^20.16.5",
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.24.2",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "wrangler": "^3.78.0"
+  }
+}
