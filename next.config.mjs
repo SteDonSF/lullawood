@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    // Local /public/art placeholders today; swap to a CDN/loader when art lands.
+    unoptimized: true,
     formats: ["image/avif", "image/webp"],
   },
 };
