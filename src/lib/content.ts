@@ -47,7 +47,6 @@ export const TIERS: Tier[] = [
 ];
 
 // Testimonials: REAL words from REAL test families only. Placeholder until then.
-export type Testimonial = { quote: string; name: string; detail: string; photo: string; placeholder?: boolean };
 export type Testimonial = { quote: string; name: string; detail: string; initials: string; stars: number };
 export const TESTIMONIALS: Testimonial[] = [
   { quote: "Bedtime used to be a fight. We tried a few of the sample stories and now my four-year-old asks if we can \u201Cgo to Lullawood\u201D before bed. That alone is worth it.",
