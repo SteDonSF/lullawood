@@ -42,3 +42,14 @@ export const waitlist = pgTable("waitlist", {
   source: text("source"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const demoEvents = pgTable("demo_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ipHash: text("ip_hash"),
+  childName: text("child_name"),
+  animal: text("animal"),
+  adventure: text("adventure"),
+  color: text("color"),
+  ok: boolean("ok").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
