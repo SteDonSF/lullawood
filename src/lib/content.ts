@@ -104,6 +104,9 @@ export const CHARACTERS: Friend[] = [
   { name: "Willow", role: "The Rabbit — gentle, brave, carries the lantern", art: "char-willow" },
   { name: "Bramble", role: "The Bear — loyal protector, loves warm cocoa", art: "char-bramble" },
   { name: "Nimbus", role: "The Dragon — tiny, shy, a little spark of magic", art: "char-nimbus" },
+  { name: "Waverley", role: "The Whale — calm, kind, storyteller of the deep", art: "char-waverley" },
+  { name: "Linden", role: "The Lion — brave guardian who stands up for what's right", art: "char-linden" },
+  { name: "Luna", role: "The Unicorn — keeper of dreams and starlight", art: "char-luna" },
 ];
 
 export const FINAL = {
