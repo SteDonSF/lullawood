@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { STORY_SYSTEM_PROMPT } from "./story/prompt";
 
 // Server-side only. Key never reaches the browser.
 export function getAnthropic() {
@@ -7,12 +8,18 @@ export function getAnthropic() {
   return new Anthropic({ apiKey });
 }
 
-export async function generateStory(prompt: string): Promise<string> {
+// Sonnet-class for the richer storytelling the product needs. Override with
+// STORY_MODEL if you ever want to dial cost/quality without a code change.
+const DEFAULT_MODEL = "claude-sonnet-4-6";
+
+export async function generateStory(userPrompt: string): Promise<string> {
   const client = getAnthropic();
   const msg = await client.messages.create({
-    model: process.env.STORY_MODEL ?? "claude-haiku-4-5",
-    max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
+    model: process.env.STORY_MODEL ?? DEFAULT_MODEL,
+    max_tokens: 1400,            // room for a full ~350–450 word story
+    temperature: 0.8,            // a little warmth and variety in the prose
+    system: STORY_SYSTEM_PROMPT, // the storyteller's craft + voice + safety
+    messages: [{ role: "user", content: userPrompt }],
   });
   return msg.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
