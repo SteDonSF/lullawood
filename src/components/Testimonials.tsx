@@ -18,7 +18,7 @@ export function Testimonials() {
         <div className="mt-10 overflow-hidden rounded-2xl border border-border shadow-page">
           <img src="/art/testimonials.webp" alt="A parent closing a finished storybook beside a peacefully sleeping child" className="w-full object-cover" />
         </div>
-        <div className="mt-8 columns-1 gap-6 md:columns-2 lg:columns-3 [&>*]:mb-6 [&>*]:break-inside-avoid">
+        <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {TESTIMONIALS.map((t, i) => (
             <figure key={i} className="rounded-2xl border border-border bg-cream-paper p-6 shadow-page">
               <Stars n={t.stars} />
