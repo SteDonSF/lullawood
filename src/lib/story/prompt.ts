@@ -29,6 +29,7 @@ export type StoryContext = {
   profile: ChildProfile;
   costar?: CoStar;                  // optional sibling/friend who co-stars
   customRequest?: string;           // free-text: the parent's own words for tonight
+  targetMinutes?: number;           // desired read-aloud length in minutes
   recurringCharacters?: string[];   // e.g. ["Fern the fox", "Oliver the owl"]
   previousAdventures?: string[];    // one-line summaries of recent nights
   weeklyTheme?: string;             // e.g. "sharing"
@@ -70,6 +71,7 @@ FORMAT
 - First line: a short, whimsical title (no quotation marks, no "Title:").
 - Then a blank line.
 - Then the story itself.
+- Write plain prose only. Do NOT use any markdown or formatting characters — no asterisks, underscores, bold, italics, or bullet points. For emphasis, choose stronger words or rhythm, never symbols.
 - No notes, no preamble, no commentary before or after. Only the title and the story.`;
 
 // ----- Age-specific direction for the user prompt. -----
@@ -175,11 +177,15 @@ export function buildStoryUserPrompt(ctx: StoryContext): string {
     lines.push(``, `QUIET THEME for this week, woven in softly and never preachy: ${ctx.weeklyTheme}.`);
   }
 
-  // Length scales with age — older kids get a meatier story.
-  const wordTarget = pitchAge <= 5 ? "250–350" : pitchAge <= 8 ? "400–550" : "500–650";
+  // Length is the parent's choice (read-aloud minutes), INDEPENDENT of age.
+  // Age drives complexity/stakes above; this drives duration.
+  const minutes = Math.max(1, Math.min(10, ctx.targetMinutes ?? 5));
+  const words = Math.round(minutes * 130); // ~130 words/min at a calm read-aloud pace
+  const lo = Math.round(words * 0.85);
+  const hi = Math.round(words * 1.15);
   lines.push(
     ``,
-    `LENGTH: roughly ${wordTarget} words — long enough to feel like a real story, short enough for one bedtime.`,
+    `LENGTH: aim for about ${minutes} minutes read aloud at a calm bedtime pace — roughly ${lo}–${hi} words. Treat this as a target, not a hard rule: let the story breathe to fill the time, but never pad. Pace the four beats so the whole thing lands naturally at that length.`,
     `Remember: however exciting the middle, end almost in a whisper, with ${costar ? `${p.name} and ${costar.name}` : p.name} growing sleepy and safe and settling down to rest.`,
   );
 
