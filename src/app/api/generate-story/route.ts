@@ -39,9 +39,10 @@ export async function POST(req: NextRequest) {
     // If the check fails, fail open (don't block a real visitor over a logging hiccup).
   }
   try {
-    const { name, age, animal, adventure, color, costar } = await req.json();
+    const { name, age, animal, adventure, color, customRequest, costar } = await req.json();
     const cleanName = (name || "a curious little one").toString().slice(0, 40);
     const childAge = cleanAge(age);
+    const cleanCustom = customRequest ? customRequest.toString().slice(0, 600) : undefined;
 
     // Optional co-star (sibling/friend).
     let cleanCostar: { name: string; age?: number } | undefined;
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
 
     const prompt = buildStoryPrompt({
       profile: { name: cleanName, age: childAge },
+      customRequest: cleanCustom,
       costar: cleanCostar,
       animal, adventure, color,
     });
