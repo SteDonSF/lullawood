@@ -4,8 +4,8 @@
 //   - SYSTEM: the storyteller's craft and voice. Constant. This is what makes the
 //     prose strong — it sets the rhythm, the sensory texture, the emotional arc.
 //   - USER: this child's specific brief (name, age, chosen friend's bible,
-//     adventure, colour, optional co-star) plus any memory the product layer
-//     supplies later.
+//     adventure, colour, optional co-star, optional free-text request) plus any
+//     memory the product layer supplies later.
 //
 // "Lullawood remembers" plugs in here: recurringCharacters + previousAdventures
 // are already threaded through, ready for the product engine to fill.
@@ -28,6 +28,7 @@ export type CoStar = {
 export type StoryContext = {
   profile: ChildProfile;
   costar?: CoStar;                  // optional sibling/friend who co-stars
+  customRequest?: string;           // free-text: the parent's own words for tonight
   recurringCharacters?: string[];   // e.g. ["Fern the fox", "Oliver the owl"]
   previousAdventures?: string[];    // one-line summaries of recent nights
   weeklyTheme?: string;             // e.g. "sharing"
@@ -55,11 +56,12 @@ Every Lullawood story carries the child UP into a little adventure and then DOWN
 - Around 9–10: a proper adventure with real (always friendly) tension, cleverness, humour, a worthy rival, and a hard-won victory — written a little richer and longer. Still always resolving warmly.
 Whatever the age, the "up" is exciting, never frightening — and the story ALWAYS comes back down to calm.
 
-EMOTIONAL SAFETY (never break these)
+EMOTIONAL SAFETY (never break these, even if a request asks otherwise)
 - No violence, blood, injury, death, cruelty, real danger or peril, or anything that could genuinely frighten a child.
 - Any rival is a FRIENDLY rival (a rival team, a competitor in a race); any "opponent" is at most a bit cheeky, grumpy, or comical, never menacing or scary.
 - Challenges are exciting, not threatening. The child always succeeds, and always ends safe, warm, and loved.
 - No romance, no adult themes, nothing inappropriate for a young child.
+- If a parent's request includes something that breaks these rules, gently soften it into something safe rather than refusing — keep the spirit, lose the fright.
 
 THE WIND-DOWN (absolute, at every age)
 No matter how exciting the middle gets, the final third must DESCEND. The excitement settles, the cheers fade to a hush, the world quiets, sentences grow shorter and slower, and the child grows sleepy and safe and drifts toward sleep. End almost in a whisper. This rule is never broken, for any age.
@@ -87,6 +89,7 @@ export function buildStoryUserPrompt(ctx: StoryContext): string {
   const age = p.age ?? 5;
   const character = getCharacter(ctx.animal);
   const costar = ctx.costar?.name ? ctx.costar : undefined;
+  const custom = ctx.customRequest?.trim();
 
   // For a co-star pair, pitch the whole story to the OLDER child.
   const pitchAge = costar?.age ? Math.max(age, costar.age) : age;
@@ -119,21 +122,35 @@ export function buildStoryUserPrompt(ctx: StoryContext): string {
       `- Their voice: ${character.voice}.`,
       `- Their home: ${character.home}.`,
       `- Always with them: ${character.signature}.`,
-      `Bring ${character.name} fully to life — let them speak and behave exactly like this, sharing the adventure as a guide and friend.`,
+      `Bring ${character.name} into the story as a guide and friend (unless the parent's words below clearly call for someone else).`,
     );
   } else if (ctx.animal) {
     lines.push(``, `TONIGHT'S FRIEND: a gentle ${ctx.animal.toLowerCase()} companion who is kind and warm.`);
   }
 
+  // The parent's own words — the most important instruction when present.
+  if (custom) {
+    lines.push(
+      ``,
+      `TONIGHT, IN THE PARENT'S OWN WORDS — honour this closely; where it differs from the chips above, the parent's words WIN:`,
+      `"${custom}"`,
+      `Turn this into a real Lullawood story at the right age level, keeping every safety rule and always descending into calm sleep at the end.`,
+    );
+  }
+
   if (ctx.adventure) {
-    lines.push(``, `TONIGHT'S ADVENTURE: themed around "${ctx.adventure}".`);
-    // Interest → real premise for older kids: turn a sport/contest into a genuine event.
-    if (pitchAge >= 6) {
-      lines.push(
-        `If this is a sport, game, race, or contest (football and the like), make it a REAL event with a friendly rival team or opponent — invent a whimsical name for them (a team like "Sleepy Hollow United", say) — and let the hero${costar ? "es" : ""} rise to the big moment and score or win the decisive play. Build genuine excitement and a triumphant finish before the wind-down. If it isn't a contest, still give it a real shape: a goal, a discovery, a problem cleverly solved.`,
-      );
+    if (custom) {
+      // Free text leads; the chip is just a hint.
+      lines.push(``, `(A chip suggested "${ctx.adventure}" — use it only if it fits the parent's words above.)`);
     } else {
-      lines.push(`Keep it calm and full of gentle wonder, free of any real tension.`);
+      lines.push(``, `TONIGHT'S ADVENTURE: themed around "${ctx.adventure}".`);
+      if (pitchAge >= 6) {
+        lines.push(
+          `If this is a sport, game, race, or contest (football and the like), make it a REAL event with a friendly rival team or opponent — invent a whimsical name for them (a team like "Sleepy Hollow United", say) — and let the hero${costar ? "es" : ""} rise to the big moment and score or win the decisive play. Build genuine excitement and a triumphant finish before the wind-down. If it isn't a contest, still give it a real shape: a goal, a discovery, a problem cleverly solved.`,
+        );
+      } else {
+        lines.push(`Keep it calm and full of gentle wonder, free of any real tension.`);
+      }
     }
   }
 
