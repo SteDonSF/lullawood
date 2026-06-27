@@ -1,21 +1,27 @@
 import { pgTable, uuid, text, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { user } from "../auth-schema";
 
-export const parents = pgTable("parents", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  email: text("email").notNull().unique(),
-  stripeCustomerId: text("stripe_customer_id"),
-  plan: text("plan").default("trial").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+// Re-export the auth user table so getDb()'s `import * as schema` sees it,
+// letting the children -> user relation resolve in one Drizzle instance.
+export { user };
+
+// NOTE: The standalone `parents` table was removed. A logged-in parent IS the
+// auth `user` row; children hang directly off user.id (one identity).
+// Billing fields (plan, stripeCustomerId) move to a subscriptions table at the
+// Stripe phase.
 
 export const children = pgTable("children", {
   id: uuid("id").defaultRandom().primaryKey(),
-  parentId: uuid("parent_id").references(() => parents.id, { onDelete: "cascade" }).notNull(),
+  parentId: text("parent_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
   name: text("name").notNull(),
   age: integer("age"),
   animals: jsonb("animals").$type<string[]>().default([]),
   colors: jsonb("colors").$type<string[]>().default([]),
   interests: jsonb("interests").$type<string[]>().default([]),
+  // Progressive personalization (Phase 2): the free-text "living portrait"
+  // the engine mines, plus the structured "never include" avoid-list.
+  aboutText: text("about_text"),
+  avoidList: jsonb("avoid_list").$type<string[]>().default([]),
   weeklyTheme: text("weekly_theme"),
   bedtimeHour: integer("bedtime_hour").default(19),   // local hour, 0-23
   timezone: text("timezone").default("UTC"),

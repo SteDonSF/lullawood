@@ -1,8 +1,26 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
+
+type Child = {
+  id: string;
+  name: string;
+  age: number | null;
+};
 
 export default function DashboardPage() {
   const { data: session, isPending } = useSession();
+  const [children, setChildren] = useState<Child[]>([]);
+  const [loadingKids, setLoadingKids] = useState(true);
+
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((d) => setChildren(d.children ?? []))
+      .catch(() => setChildren([]))
+      .finally(() => setLoadingKids(false));
+  }, [session]);
 
   if (isPending) {
     return (
@@ -13,32 +31,75 @@ export default function DashboardPage() {
   }
 
   if (!session) {
+    if (typeof window !== "undefined") window.location.href = "/login";
     return (
-      <main className="flex min-h-screen items-center justify-center bg-cream-paper px-4">
-        <div className="text-center">
-          <p className="mb-4 text-ink">You&apos;re not logged in.</p>
-          <a href="/login" className="font-bold text-gold hover:underline">Log in</a>
-        </div>
+      <main className="flex min-h-screen items-center justify-center bg-cream-paper">
+        <p className="text-ink-muted">Redirecting to log in…</p>
       </main>
     );
   }
 
+  const firstName = session.user.name?.split(" ")[0] ?? "there";
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-cream-paper px-4">
-      <div className="w-full max-w-md rounded-3xl border border-border bg-white p-8 text-center shadow-lift">
-        <h1 className="h-display mb-2 text-2xl font-semibold text-ink">
-          Welcome, {session.user.name}.
-        </h1>
-        <p className="mb-6 text-[14px] text-ink-muted">
-          You&apos;re logged in as {session.user.email}. This is where your children&apos;s
-          profiles and nightly stories will live.
-        </p>
-        <button
-          onClick={() => signOut().then(() => (window.location.href = "/login"))}
-          className="rounded-full border border-border bg-white px-6 py-2.5 text-[14px] font-bold text-ink-muted transition hover:border-[#d8c39a] hover:text-ink"
-        >
-          Log out
-        </button>
+    <main className="min-h-screen bg-cream-paper px-4 py-10">
+      <div className="mx-auto w-full max-w-2xl">
+        <header className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="h-display text-3xl font-semibold text-ink">
+              Goodnight, {firstName}.
+            </h1>
+            <p className="mt-1 text-[14px] text-ink-muted">Your family&apos;s Lullawood.</p>
+          </div>
+          <button
+            onClick={() => signOut().then(() => (window.location.href = "/login"))}
+            className="rounded-full border border-border bg-white px-5 py-2 text-[13px] font-bold text-ink-muted transition hover:border-[#d8c39a] hover:text-ink"
+          >
+            Log out
+          </button>
+        </header>
+
+        <section className="rounded-3xl border border-border bg-white p-8 shadow-lift">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="h-display text-xl font-semibold text-ink">Your children</h2>
+            
+              <a
+              href="/dashboard/children/new"
+              className="rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5"
+            >
+              + Add a child
+            </a>
+          </div>
+
+          {loadingKids ? (
+            <p className="py-8 text-center text-[14px] text-ink-muted">Loading…</p>
+          ) : children.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[#e0d4b8] bg-cream-paper/50 px-6 py-10 text-center">
+              <p className="mb-1 text-[15px] font-semibold text-ink">No children yet.</p>
+              <p className="mx-auto max-w-sm text-[14px] text-ink-muted">
+                Let&apos;s add your first. Tell Lullawood who they are, and tonight&apos;s
+                story will be written just for them.
+              </p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {children.map((c) => (
+                <li key={c.id}>
+                  
+                    <a
+                    href={`/dashboard/children/${c.id}`}
+                    className="flex items-center justify-between rounded-2xl border border-border bg-white px-5 py-4 transition hover:border-[#d8c39a]"
+                  >
+                    <span className="text-[16px] font-semibold text-ink">{c.name}</span>
+                    <span className="text-[13px] text-ink-muted">
+                      {c.age != null ? `age ${c.age}` : "age not set"}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </main>
   );
