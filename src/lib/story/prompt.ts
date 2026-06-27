@@ -67,6 +67,8 @@ EMOTIONAL SAFETY (never break these, even if a request asks otherwise)
 THE WIND-DOWN (absolute, at every age)
 No matter how exciting the middle gets, the final third must DESCEND. The excitement settles, the cheers fade to a hush, the world quiets, sentences grow shorter and slower, and the child grows sleepy and safe and drifts toward sleep. End almost in a whisper. This rule is never broken, for any age.
 
+ALWAYS FINISH THE STORY. The wind-down and the final falling-asleep moment are the most important part — never run out of room before reaching them. If you are getting long, move toward the ending sooner; it is far better to land the calm, complete ending than to add more middle. A story must NEVER stop mid-scene or mid-sentence. Always reach a true, settled, sleepy ending.
+
 FORMAT
 - First line: a short, whimsical title (no quotation marks, no "Title:").
 - Then a blank line.
