@@ -27,6 +27,7 @@ export function Demo() {
   const [animal, setAnimal] = useState("Fox");
   const [adventure, setAdventure] = useState("The Ocean");
   const [color, setColor] = useState(COLORS[1]);
+  const [customRequest, setCustomRequest] = useState("");
   const [costarOpen, setCostarOpen] = useState(false);
   const [costarName, setCostarName] = useState("");
   const [costarAge, setCostarAge] = useState("8");
@@ -53,7 +54,11 @@ export function Demo() {
         : undefined;
       const res = await fetch("/api/generate-story", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), age: ageNum, animal, adventure, color: color.name, costar }),
+        body: JSON.stringify({
+          name: name.trim(), age: ageNum, animal, adventure, color: color.name,
+          customRequest: customRequest.trim().slice(0, 600) || undefined,
+          costar,
+        }),
       });
       if (!res.ok) throw new Error("bad");
       const data = await res.json();
@@ -91,6 +96,14 @@ export function Demo() {
         <div className="flex flex-wrap gap-2">{ANIMALS.map((a) => <Chip key={a} active={animal === a} onClick={() => setAnimal(a)}>{a}</Chip>)}</div>
         <span className="mt-2.5 text-[13px] font-bold text-ink-muted">Tonight&apos;s adventure</span>
         <div className="flex flex-wrap gap-2">{ADVENTURES.map((a) => <Chip key={a} active={adventure === a} onClick={() => setAdventure(a)}>{a}</Chip>)}</div>
+
+        {/* Free-text: describe your own adventure */}
+        <span className="mt-2.5 text-[13px] font-bold text-ink-muted">…or describe your own adventure <span className="font-semibold text-ink-muted/70">(optional)</span></span>
+        <textarea value={customRequest} maxLength={600} rows={2}
+          placeholder="e.g. Arno and Leo win the cup final against Sleepy Hollow United"
+          onChange={(e) => setCustomRequest(e.target.value)}
+          className="resize-none rounded-2xl border border-border bg-white px-4 py-3 text-[15px] font-medium text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+
         <span className="mt-2.5 text-[13px] font-bold text-ink-muted">A favourite colour</span>
         <div className="flex flex-wrap gap-2">{COLORS.map((c) => <Chip key={c.name} active={color.name === c.name} onClick={() => setColor(c)} dot={c.hex}>{c.name}</Chip>)}</div>
 
