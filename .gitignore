@@ -1,0 +1,19 @@
+# dependencies
+/node_modules
+
+# next.js build output
+/.next
+/out
+/.vercel
+/.open-next
+
+# environment / secrets
+.env
+.env*.local
+
+# macOS junk
+.DS_Store
+
+# logs / misc
+*.log
+npm-debug.log*
