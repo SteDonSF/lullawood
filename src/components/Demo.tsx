@@ -23,9 +23,13 @@ function Chip({ active, onClick, children, dot }: { active: boolean; onClick: ()
 
 export function Demo() {
   const [name, setName] = useState("");
+  const [age, setAge] = useState("6");
   const [animal, setAnimal] = useState("Fox");
   const [adventure, setAdventure] = useState("The Ocean");
   const [color, setColor] = useState(COLORS[1]);
+  const [costarOpen, setCostarOpen] = useState(false);
+  const [costarName, setCostarName] = useState("");
+  const [costarAge, setCostarAge] = useState("8");
   const [loading, setLoading] = useState(false);
   const [story, setStory] = useState("");
   const [shown, setShown] = useState(0);
@@ -43,9 +47,13 @@ export function Demo() {
   async function generate() {
     setLoading(true); setError(""); setStory(""); setShown(0);
     try {
+      const ageNum = Math.max(1, Math.min(12, parseInt(age, 10) || 6));
+      const costar = costarOpen && costarName.trim()
+        ? { name: costarName.trim().slice(0, 24), age: Math.max(1, Math.min(12, parseInt(costarAge, 10) || ageNum)) }
+        : undefined;
       const res = await fetch("/api/generate-story", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), animal, adventure, color: color.name }),
+        body: JSON.stringify({ name: name.trim(), age: ageNum, animal, adventure, color: color.name, costar }),
       });
       if (!res.ok) throw new Error("bad");
       const data = await res.json();
@@ -62,16 +70,55 @@ export function Demo() {
   return (
     <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 rounded-3xl border border-border bg-cream-paper p-6 shadow-lift md:grid-cols-2">
       <div className="flex flex-col gap-2">
-        <label htmlFor="lw-name" className="mt-2.5 text-[13px] font-bold text-ink-muted">Your child&apos;s name</label>
-        <input id="lw-name" value={name} maxLength={24} placeholder="e.g. Maya"
-          onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && generate()}
-          className="rounded-2xl border border-border bg-white px-4 py-3 text-[16px] font-semibold text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+        {/* Name + age on one row */}
+        <div className="flex gap-3">
+          <div className="flex flex-1 flex-col gap-2">
+            <label htmlFor="lw-name" className="mt-2.5 text-[13px] font-bold text-ink-muted">Your child&apos;s name</label>
+            <input id="lw-name" value={name} maxLength={24} placeholder="e.g. Maya"
+              onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && generate()}
+              className="rounded-2xl border border-border bg-white px-4 py-3 text-[16px] font-semibold text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+          </div>
+          <div className="flex w-[88px] flex-col gap-2">
+            <label htmlFor="lw-age" className="mt-2.5 text-[13px] font-bold text-ink-muted">Age</label>
+            <input id="lw-age" value={age} inputMode="numeric" placeholder="6"
+              onChange={(e) => setAge(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+              onKeyDown={(e) => e.key === "Enter" && generate()}
+              className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-center text-[16px] font-semibold text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+          </div>
+        </div>
+
         <span className="mt-2.5 text-[13px] font-bold text-ink-muted">A friendly companion</span>
         <div className="flex flex-wrap gap-2">{ANIMALS.map((a) => <Chip key={a} active={animal === a} onClick={() => setAnimal(a)}>{a}</Chip>)}</div>
         <span className="mt-2.5 text-[13px] font-bold text-ink-muted">Tonight&apos;s adventure</span>
         <div className="flex flex-wrap gap-2">{ADVENTURES.map((a) => <Chip key={a} active={adventure === a} onClick={() => setAdventure(a)}>{a}</Chip>)}</div>
         <span className="mt-2.5 text-[13px] font-bold text-ink-muted">A favourite colour</span>
         <div className="flex flex-wrap gap-2">{COLORS.map((c) => <Chip key={c.name} active={color.name === c.name} onClick={() => setColor(c)} dot={c.hex}>{c.name}</Chip>)}</div>
+
+        {/* Optional co-star */}
+        {!costarOpen ? (
+          <button type="button" onClick={() => setCostarOpen(true)}
+            className="mt-3 self-start text-[13px] font-bold text-ink-muted underline decoration-dotted underline-offset-4 transition hover:text-ink">
+            + Add a brother or sister
+          </button>
+        ) : (
+          <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-border bg-white/60 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-bold text-ink-muted">And a brother or sister</span>
+              <button type="button" onClick={() => { setCostarOpen(false); setCostarName(""); }}
+                className="text-[12px] font-bold text-ink-muted/70 hover:text-ink">Remove</button>
+            </div>
+            <div className="flex gap-3">
+              <input value={costarName} maxLength={24} placeholder="e.g. Leo"
+                onChange={(e) => setCostarName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && generate()}
+                className="flex-1 rounded-2xl border border-border bg-white px-4 py-2.5 text-[15px] font-semibold text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+              <input value={costarAge} inputMode="numeric" placeholder="8"
+                onChange={(e) => setCostarAge(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+                onKeyDown={(e) => e.key === "Enter" && generate()}
+                className="w-[72px] rounded-2xl border border-border bg-white px-3 py-2.5 text-center text-[15px] font-semibold text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+            </div>
+          </div>
+        )}
+
         <button type="button" onClick={generate} disabled={loading}
           className="mt-4 w-full rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-6 py-3 text-[15px] font-bold text-[#3a2d05] shadow-[0_10px_28px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70">
           {loading ? "Lighting the lamps…" : story ? "Write another" : "Read tonight's story"}
