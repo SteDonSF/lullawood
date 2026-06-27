@@ -1,42 +1,36 @@
+import { getAuth } from "@/lib/auth";
+
 export const runtime = "edge";
 
-// Standalone diagnostic — isolates WHERE auth construction fails.
+// Diagnostic: actually attempt a signup server-side and surface the real error.
 export async function GET(): Promise<Response> {
   const steps: string[] = [];
   try {
-    steps.push("start");
-    steps.push("DATABASE_URL: " + (process.env.DATABASE_URL ? "present" : "MISSING"));
-    steps.push("BETTER_AUTH_SECRET: " + (process.env.BETTER_AUTH_SECRET ? "present" : "MISSING"));
-    steps.push("BETTER_AUTH_URL: " + (process.env.BETTER_AUTH_URL ?? "MISSING"));
+    steps.push("getAuth()");
+    const auth = getAuth();
+    steps.push("auth built");
 
-    steps.push("importing better-auth");
-    const { betterAuth } = await import("better-auth");
-    steps.push("imported betterAuth OK");
+    const testEmail = `diag_${Date.now()}@example.com`;
+    steps.push("calling signUpEmail for " + testEmail);
 
-    const { drizzleAdapter } = await import("better-auth/adapters/drizzle");
-    steps.push("imported drizzleAdapter OK");
-
-    const { neon } = await import("@neondatabase/serverless");
-    const { drizzle } = await import("drizzle-orm/neon-http");
-    steps.push("imported neon + drizzle OK");
-
-    const db = drizzle(neon(process.env.DATABASE_URL!));
-    steps.push("created db OK");
-
-    const auth = betterAuth({
-      database: drizzleAdapter(db, { provider: "pg" }),
-      secret: process.env.BETTER_AUTH_SECRET,
-      baseURL: process.env.BETTER_AUTH_URL ?? "https://lullawood.com",
-      emailAndPassword: { enabled: true },
+    const result = await auth.api.signUpEmail({
+      body: { name: "Diag Test", email: testEmail, password: "test12345" },
     });
-    steps.push("constructed auth OK");
+    steps.push("signUpEmail returned");
 
-    return new Response(JSON.stringify({ ok: true, steps }, null, 2), {
+    return new Response(JSON.stringify({ ok: true, steps, result }, null, 2), {
       headers: { "Content-Type": "application/json" },
     });
   } catch (err: any) {
     return new Response(
-      JSON.stringify({ ok: false, steps, error: err?.message ?? String(err), stack: err?.stack ?? null }, null, 2),
+      JSON.stringify({
+        ok: false,
+        steps,
+        error: err?.message ?? String(err),
+        name: err?.name ?? null,
+        cause: err?.cause ? String(err.cause) : null,
+        stack: err?.stack ?? null,
+      }, null, 2),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   }
