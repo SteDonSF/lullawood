@@ -17,6 +17,11 @@ function cleanAge(v: unknown, fallback = 6): number {
   if (!Number.isFinite(n)) return fallback;
   return Math.max(1, Math.min(12, n));
 }
+function cleanMinutes(v: unknown, fallback = 5): number {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.min(10, n));
+}
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "unknown";
   const ipHash = await hashIp(ip);
@@ -39,9 +44,10 @@ export async function POST(req: NextRequest) {
     // If the check fails, fail open (don't block a real visitor over a logging hiccup).
   }
   try {
-    const { name, age, animal, adventure, color, customRequest, costar } = await req.json();
+    const { name, age, animal, adventure, color, targetMinutes, customRequest, costar } = await req.json();
     const cleanName = (name || "a curious little one").toString().slice(0, 40);
     const childAge = cleanAge(age);
+    const minutes = cleanMinutes(targetMinutes);
     const cleanCustom = customRequest ? customRequest.toString().slice(0, 600) : undefined;
 
     // Optional co-star (sibling/friend).
@@ -55,6 +61,7 @@ export async function POST(req: NextRequest) {
 
     const prompt = buildStoryPrompt({
       profile: { name: cleanName, age: childAge },
+      targetMinutes: minutes,
       customRequest: cleanCustom,
       costar: cleanCostar,
       animal, adventure, color,
