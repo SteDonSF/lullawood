@@ -9,6 +9,11 @@ const COLORS = [
   { name: "blue", hex: "#6FA8DC" }, { name: "gold", hex: "#E2A12C" }, { name: "green", hex: "#6FB17E" },
   { name: "teal", hex: "#3FA3A3" }, { name: "peach", hex: "#E0815C" }, { name: "purple", hex: "#9B7BD4" },
 ];
+const LENGTHS = [
+  { label: "Short", min: 3, hint: "~3 min" },
+  { label: "Medium", min: 5, hint: "~5 min" },
+  { label: "Long", min: 7, hint: "~7 min" },
+];
 
 function Chip({ active, onClick, children, dot }: { active: boolean; onClick: () => void; children: React.ReactNode; dot?: string }) {
   return (
@@ -27,6 +32,7 @@ export function Demo() {
   const [animal, setAnimal] = useState("Fox");
   const [adventure, setAdventure] = useState("The Ocean");
   const [color, setColor] = useState(COLORS[1]);
+  const [length, setLength] = useState(5);
   const [customRequest, setCustomRequest] = useState("");
   const [costarOpen, setCostarOpen] = useState(false);
   const [costarName, setCostarName] = useState("");
@@ -56,6 +62,7 @@ export function Demo() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(), age: ageNum, animal, adventure, color: color.name,
+          targetMinutes: length,
           customRequest: customRequest.trim().slice(0, 600) || undefined,
           costar,
         }),
@@ -106,6 +113,16 @@ export function Demo() {
 
         <span className="mt-2.5 text-[13px] font-bold text-ink-muted">A favourite colour</span>
         <div className="flex flex-wrap gap-2">{COLORS.map((c) => <Chip key={c.name} active={color.name === c.name} onClick={() => setColor(c)} dot={c.hex}>{c.name}</Chip>)}</div>
+
+        {/* Story length */}
+        <span className="mt-2.5 text-[13px] font-bold text-ink-muted">Story length</span>
+        <div className="flex flex-wrap gap-2">
+          {LENGTHS.map((l) => (
+            <Chip key={l.min} active={length === l.min} onClick={() => setLength(l.min)}>
+              {l.label} <span className="font-semibold text-ink-muted/70">{l.hint}</span>
+            </Chip>
+          ))}
+        </div>
 
         {/* Optional co-star */}
         {!costarOpen ? (
