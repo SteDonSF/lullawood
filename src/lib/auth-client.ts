@@ -4,4 +4,11 @@ import { createAuthClient } from "better-auth/react";
 // baseURL defaults to the current origin, so it works on localhost and prod alike.
 export const authClient = createAuthClient();
 
-export const { signUp, signIn, signOut, useSession } = authClient;
+export const {
+  signUp,
+  signIn,
+  signOut,
+  useSession,
+  requestPasswordReset,
+  resetPassword,
+} = authClient;
