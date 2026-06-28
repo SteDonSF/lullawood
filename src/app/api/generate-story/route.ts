@@ -1,30 +1,30 @@
 // =============================================================================
-// /api/generate-story  —  TWO modes, one engine.
+// /api/generate-story  —  TWO modes, one engine.  (+ episodic memory in Mode A)
 // -----------------------------------------------------------------------------
-// MODE A (authenticated, NEW): body has { childId }. A logged-in parent generates
-//   a story FROM a saved child profile. We load the child (ownership-checked via
-//   session), map its saved fields into the StoryContext the prompt builder
-//   already understands, generate, and return { story, title }.
-// MODE B (anonymous demo, UNCHANGED): no childId. The original public-demo path —
-//   IP-rate-limited, fields come straight from the request body. Untouched so the
-//   marketing demo keeps working exactly as before.
+// MODE A (authenticated): body has { childId }. Generate FROM a saved child
+//   profile. NOW WITH MEMORY: before generating we load the child's recent story
+//   summaries and feed them in (continuity + anti-repetition); after generating
+//   we save the story and a one-line summary, so tomorrow remembers tonight.
+// MODE B (anonymous demo, UNCHANGED): no childId. Original public-demo path.
 //
-// WHY a branch (not two routes): the prompt builder (lib/story/prompt.ts) and the
-//   model call (lib/anthropic.ts) are shared. Only the INPUT differs (saved
-//   profile vs. anonymous body) and the LIMIT differs (per-user vs. per-IP).
+// THE MEMORY LOOP (episodic):
+//   retrieve last N summaries -> previousAdventures -> generate ->
+//   save story -> summarise -> save summary.  Schema was built for this
+//   (stories.summary). recurringCharacters is also threaded for later.
 //
-// LULLAWOOD-FUTURE (Phase 3 memory): in MODE A, after generating, SAVE the story
-//   + a one-line summary to schema.stories (childId), and BEFORE generating, load
-//   the child's recent summaries into ctx.previousAdventures + recurringCharacters.
-//   The builder already accepts both — this is the spot that switches "remember" on.
-// LULLAWOOD-FUTURE (Phase 5 Stripe): gate MODE A behind an active subscription/
-//   trial before generating.
-// LULLAWOOD-FUTURE: per-user rate limiting in MODE A is a soft guard (10/hr) to
-//   prevent runaway cost; revisit once plans/limits are defined.
+// LULLAWOOD-FUTURE (durable / semantic memory — "growth & aging"): episodic
+//   memory above is a ROLLING WINDOW of recent nights. The durable layer is a
+//   DISTILLATION of the whole history into an evolving portrait (the child's
+//   changing interests, the cast's deepening relationships, recurring rivals)
+//   that must be RE-distilled over time, not just appended — so things can fade,
+//   not only accumulate (avoid ossifying "loves dinosaurs" forever). Build it as
+//   a periodic step that writes a durable field on the child and loads it here
+//   alongside previousAdventures. THIS is where character aging lives.
+// LULLAWOOD-FUTURE (Phase 5 Stripe): gate Mode A behind an active subscription/trial.
 // =============================================================================
 import { NextRequest, NextResponse } from "next/server";
-import { sql, eq, and } from "drizzle-orm";
-import { generateStory } from "@/lib/anthropic";
+import { sql, eq, and, desc } from "drizzle-orm";
+import { generateStory, summarizeStory } from "@/lib/anthropic";
 import { buildStoryPrompt } from "@/lib/story/prompt";
 import { getDb, schema } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
@@ -34,8 +34,8 @@ export const runtime = "edge";
 const LIMIT = 5;            // demo: max generations
 const WINDOW_MIN = 60;      // demo: per this many minutes, per visitor
 const USER_LIMIT = 10;      // authed: soft per-user cap per hour (cost guard)
+const MEMORY_NIGHTS = 6;    // how many recent summaries feed tonight's story
 
-// One-way hash of the IP — lets us count repeat visitors without storing the address.
 async function hashIp(ip: string): Promise<string> {
   const data = new TextEncoder().encode(ip + "|lullawood");
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -51,30 +51,24 @@ function cleanMinutes(v: unknown, fallback = 5): number {
   if (!Number.isFinite(n)) return fallback;
   return Math.max(1, Math.min(10, n));
 }
-
-// Split the model output ("Title\n\nbody…") into { title, story } for the app UI.
-// (The demo returns the raw string; the authed UI shows title separately.)
 function splitTitle(raw: string): { title: string; story: string } {
   const trimmed = raw.trimStart();
   const nl = trimmed.indexOf("\n");
   if (nl === -1) return { title: "", story: trimmed };
-  const title = trimmed.slice(0, nl).trim();
-  const story = trimmed.slice(nl).trim();
-  return { title, story };
+  return { title: trimmed.slice(0, nl).trim(), story: trimmed.slice(nl).trim() };
 }
 
 export async function POST(req: NextRequest) {
   const db = getDb();
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
 
-  // ---------- MODE A: authenticated, from a saved child ----------
+  // ---------- MODE A: authenticated, from a saved child (+ memory) ----------
   if (body && (body as any).childId) {
     const user = await getSessionUser(req.headers);
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
     const childId = String((body as any).childId);
 
-    // Load the child — ownership-checked (id AND parentId from the session).
     const [child] = await db
       .select()
       .from(schema.children)
@@ -97,13 +91,33 @@ export async function POST(req: NextRequest) {
           { status: 429 }
         );
       }
-    } catch {
-      // fail open — never block a real parent over a logging hiccup.
-    }
+    } catch { /* fail open */ }
 
-    // Map the SAVED profile into the StoryContext the builder already understands.
-    // animals[0] is the structured favourite companion (maps to a character bible).
+    // ----- RETRIEVE: recent summaries for continuity + anti-repetition -----
+    let previousAdventures: string[] = [];
+    try {
+      const recent = await db
+        .select({ summary: schema.stories.summary })
+        .from(schema.stories)
+        .where(eq(schema.stories.childId, childId))
+        .orderBy(desc(schema.stories.createdAt))
+        .limit(MEMORY_NIGHTS);
+      previousAdventures = recent
+        .map((r) => (r.summary ?? "").trim())
+        .filter(Boolean);
+    } catch { /* no memory yet, or read hiccup — generate fresh */ }
+
     const animal = (child.animals && child.animals[0]) || undefined;
+    const aboutLine = child.aboutText ? `About ${child.name}: ${child.aboutText}` : "";
+    const avoidLine = (child.avoidList && child.avoidList.length)
+      ? `NEVER include any of these (the child dislikes or fears them): ${child.avoidList.join(", ")}.`
+      : "";
+    // Anti-repetition is explicit: the builder shows previousAdventures as
+    // continuity; we also tell it plainly not to repeat them.
+    const antiRepeat = previousAdventures.length
+      ? `Do NOT repeat the plots of recent nights listed under continuity — tonight must be a fresh adventure, though familiar friends and places may return.`
+      : "";
+
     const ctx = {
       profile: {
         name: child.name,
@@ -112,25 +126,30 @@ export async function POST(req: NextRequest) {
         colors: child.colors ?? [],
       },
       animal,
-      // The living portrait + the avoid-list ride in as the parent's own words,
-      // so the engine honours them (avoid-list framed as a hard constraint).
-      customRequest: [
-        child.aboutText ? `About ${child.name}: ${child.aboutText}` : "",
-        (child.avoidList && child.avoidList.length)
-          ? `NEVER include any of these (the child dislikes or fears them): ${child.avoidList.join(", ")}.`
-          : "",
-      ].filter(Boolean).join("\n\n") || undefined,
+      customRequest: [aboutLine, avoidLine, antiRepeat].filter(Boolean).join("\n\n") || undefined,
       targetMinutes: cleanMinutes((body as any).targetMinutes, 5),
-      // LULLAWOOD-FUTURE: load these from saved stories to switch on memory.
-      // recurringCharacters: [...], previousAdventures: [...],
+      previousAdventures,                                  // <- the memory, fed in
+      recurringCharacters: child.recurringCharacters ?? [], // threaded for durable layer
     };
 
     try {
       const raw = await generateStory(buildStoryPrompt(ctx as any));
       if (!raw) throw new Error("empty");
       const { title, story } = splitTitle(raw);
-      // LULLAWOOD-FUTURE (Phase 3): persist here —
-      //   await db.insert(schema.stories).values({ childId, title, body: story, summary });
+
+      // ----- SAVE: store the story, then summarise for tomorrow -----
+      // Summary is best-effort (helper swallows its own errors); we still save
+      // the story even if the summary comes back empty.
+      const summary = await summarizeStory(story, child.name);
+      try {
+        await db.insert(schema.stories).values({
+          childId,
+          title: title || "A Lullawood story",
+          body: story,
+          summary: summary || null,
+        });
+      } catch { /* never let a save hiccup break delivery */ }
+
       return NextResponse.json({ story, title });
     } catch {
       return NextResponse.json({ error: "generation_failed" }, { status: 500 });
@@ -154,9 +173,7 @@ export async function POST(req: NextRequest) {
         { status: 429 }
       );
     }
-  } catch {
-    // fail open
-  }
+  } catch { /* fail open */ }
 
   try {
     const { name, age, animal, adventure, color, targetMinutes, customRequest, costar } = body as any;
