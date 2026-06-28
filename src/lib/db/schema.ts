@@ -59,3 +59,25 @@ export const demoEvents = pgTable("demo_events", {
   ok: boolean("ok").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  // One subscription per parent (the auth user). Billing identity that
+  // replaced the dropped `parents` table's plan/stripeCustomerId fields.
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }).notNull().unique(),
+  // Which plan: 'dreamer' | 'family' (mirrors the Stripe products).
+  plan: text("plan"),
+  // Stripe's truth — set/updated by the webhook, never by the browser.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripePriceId: text("stripe_price_id"),
+  // Lifecycle status from Stripe: 'trialing' | 'active' | 'past_due' |
+  // 'canceled' | 'incomplete' | etc. Gating reads this.
+  status: text("status"),
+  // When the current paid/trial period ends (for access checks + display).
+  currentPeriodEnd: timestamp("current_period_end"),
+  trialEnd: timestamp("trial_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
