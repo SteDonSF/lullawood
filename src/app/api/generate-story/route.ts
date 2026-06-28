@@ -28,6 +28,7 @@ import { generateStory, summarizeStory } from "@/lib/anthropic";
 import { buildStoryPrompt } from "@/lib/story/prompt";
 import { getDb, schema } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
+import { getAccess } from "@/lib/subscription";
 
 export const runtime = "edge";
 
@@ -75,7 +76,16 @@ export async function POST(req: NextRequest) {
       .where(and(eq(schema.children.id, childId), eq(schema.children.parentId, user.id)))
       .limit(1);
     if (!child) return NextResponse.json({ error: "Child not found" }, { status: 404 });
-
+    
+    // GATE: require an active trial or subscription to generate (Phase 5).
+    const access = await getAccess(user.id);
+    if (!access.hasAccess) {
+      return NextResponse.json(
+        { error: "no_subscription", message: "Start a free trial to generate stories." },
+        { status: 402 }
+      );
+    }
+    
     // Soft per-user rate limit (cost guard).
     try {
       const rows = await db.execute(
