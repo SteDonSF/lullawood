@@ -22,7 +22,7 @@ export default function Page() {
 
       <h2>How we use information</h2>
       <ul>
-        <li>To generate and deliver your child&apos;s personalized stories and audio.</li>
+        <li>To generate and deliver your child&apos;s personalized stories.</li>
         <li>To run your account, process payments, and provide support.</li>
         <li>To keep the service safe and to improve it (using aggregated, non-identifying data where possible).</li>
         <li>To meet legal obligations.</li>

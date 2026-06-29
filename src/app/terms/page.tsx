@@ -9,7 +9,7 @@ export default function Page() {
       <p>You must be at least 18 and able to enter a contract. Lullawood is operated by you on behalf of the children in your care; you are responsible for the profiles you create and for supervising your child&apos;s use.</p>
 
       <h2>The service</h2>
-      <p>Lullawood generates personalized bedtime stories and audio based on the profile you provide, and (on some plans) mails printed keepsakes. Stories are created with AI and are intended for personal, family use.</p>
+      <p>Lullawood generates personalized bedtime stories based on the profile you provide. Stories are created with AI and are intended for personal, family use. We may add features such as narrated audio, email delivery, and printed keepsakes over time.</p>
 
       <h2>Plans, trials, and billing</h2>
       <ul>

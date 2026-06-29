@@ -81,7 +81,7 @@ export function Demo() {
   const visible = body.slice(0, Math.max(0, shown - titleLine.length));
 
   return (
-    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 rounded-3xl border border-border bg-cream-paper p-6 shadow-lift md:grid-cols-2">
+    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 rounded-3xl border border-border bg-cream-paper p-6 shadow-lift md:grid-cols-2 md:items-stretch">
       <div className="flex flex-col gap-2">
         {/* Name + age on one row */}
         <div className="flex gap-3">

@@ -8,7 +8,7 @@ export function Footer() {
         <div className="md:col-span-2">
           <div className="flex items-center gap-2.5 text-ink"><Mark size={26} /><span className="wordmark text-lg font-semibold">Lullawood</span></div>
           <p className="h-display mt-1 text-[15px] italic text-gold-text">Stories for little dreamers</p>
-          <p className="mt-3 max-w-xs text-[14px] text-ink-muted">A bedtime world, made for one child at a time. Written nightly, read in your voice or ours.</p>
+          <p className="mt-3 max-w-xs text-[14px] text-ink-muted">A bedtime world, made for one child at a time. A new story every night, yours to read aloud.</p>
         </div>
         <div>
           <p className="text-[13px] font-bold uppercase tracking-wide text-ink-muted">Lullawood</p>
