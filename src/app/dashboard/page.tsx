@@ -8,10 +8,20 @@ type Child = {
   age: number | null;
 };
 
+type Sub = {
+  hasAccess: boolean;
+  plan: string | null;
+  status: string | null;
+  trialEnd?: string | null;
+  cancelAtPeriodEnd?: boolean | null;
+};
+
 export default function DashboardPage() {
   const { data: session, isPending } = useSession();
   const [children, setChildren] = useState<Child[]>([]);
   const [loadingKids, setLoadingKids] = useState(true);
+  const [sub, setSub] = useState<Sub | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     if (!session) return;
@@ -20,6 +30,10 @@ export default function DashboardPage() {
       .then((d) => setChildren(d.children ?? []))
       .catch(() => setChildren([]))
       .finally(() => setLoadingKids(false));
+    fetch("/api/subscription")
+      .then((r) => r.json())
+      .then((d) => setSub(d))
+      .catch(() => setSub(null));
   }, [session]);
 
   if (isPending) {
@@ -38,6 +52,25 @@ export default function DashboardPage() {
       </main>
     );
   }
+
+  async function openPortal() {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/billing-portal", { method: "POST" });
+      const d = await res.json();
+      if (d.url) window.location.href = d.url;
+      else setPortalLoading(false);
+    } catch {
+      setPortalLoading(false);
+    }
+  }
+
+  const planLabel = sub?.plan === "family" ? "Family" : sub?.plan === "dreamer" ? "Dreamer" : null;
+  const statusLabel =
+    sub?.status === "trialing" ? "Free trial" : sub?.status === "active" ? "Active" : sub?.status ?? "";
+  const trialDate = sub?.trialEnd
+    ? new Date(sub.trialEnd).toLocaleDateString(undefined, { month: "long", day: "numeric" })
+    : null;
 
   const firstName = session.user.name?.split(" ")[0] ?? "there";
 
@@ -59,11 +92,58 @@ export default function DashboardPage() {
           </button>
         </header>
 
+        <section className="mb-6 rounded-3xl border border-border bg-white p-6 shadow-lift">
+          {sub?.hasAccess ? (
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[15px] font-semibold text-ink">
+                  {planLabel} plan
+                  <span className="ml-2 rounded-full bg-cream-paper px-2.5 py-0.5 text-[12px] font-bold text-ink-muted">
+                    {statusLabel}
+                  </span>
+                </p>
+                {sub.status === "trialing" && trialDate && (
+                  <p className="mt-1 text-[13px] text-ink-muted">
+                    Your free trial runs until {trialDate}.
+                  </p>
+                )}
+                {sub.cancelAtPeriodEnd && (
+                  <p className="mt-1 text-[13px] text-ink-muted">
+                    Cancels at the end of the current period.
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={openPortal}
+                disabled={portalLoading}
+                className="shrink-0 rounded-full border border-border bg-white px-5 py-2.5 text-[13px] font-bold text-ink-muted transition hover:border-[#d8c39a] hover:text-ink disabled:opacity-60"
+              >
+                {portalLoading ? "Opening…" : "Manage subscription"}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[15px] font-semibold text-ink">No active plan</p>
+                <p className="mt-1 text-[13px] text-ink-muted">
+                  Start a free trial to write tonight&apos;s story.
+                </p>
+              </div>
+              
+              <a
+                href="/pricing"
+                className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[13px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5"
+              >
+                Choose a plan
+              </a>
+            </div>
+          )}
+        </section>
+
         <section className="rounded-3xl border border-border bg-white p-8 shadow-lift">
           <div className="mb-5 flex items-center justify-between">
             <h2 className="h-display text-xl font-semibold text-ink">Your children</h2>
-            
-              <a
+            <a
               href="/dashboard/children/new"
               className="rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5"
             >
@@ -86,7 +166,7 @@ export default function DashboardPage() {
               {children.map((c) => (
                 <li key={c.id}>
                   
-                    <a
+                  <a
                     href={`/dashboard/children/${c.id}`}
                     className="flex items-center justify-between rounded-2xl border border-border bg-white px-5 py-4 transition hover:border-[#d8c39a]"
                   >

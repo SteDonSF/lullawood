@@ -28,13 +28,14 @@ function Chip({ active, onClick, children, dot }: { active: boolean; onClick: ()
 
 export function Demo() {
   const [name, setName] = useState("");
-  const [age, setAge] = useState("6");
+  const [age, setAge] = useState("");
   const [animal, setAnimal] = useState("Fox");
   const [adventure, setAdventure] = useState("The Ocean");
   const [color, setColor] = useState(COLORS[1]);
   const [length, setLength] = useState(5);
   const [customRequest, setCustomRequest] = useState("");
   const [costarOpen, setCostarOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [costarName, setCostarName] = useState("");
   const [costarAge, setCostarAge] = useState("8");
   const [loading, setLoading] = useState(false);
@@ -104,6 +105,14 @@ export function Demo() {
         <span className="mt-2.5 text-[13px] font-bold text-ink-muted">Tonight&apos;s adventure</span>
         <div className="flex flex-wrap gap-2">{ADVENTURES.map((a) => <Chip key={a} active={adventure === a} onClick={() => setAdventure(a)}>{a}</Chip>)}</div>
 
+        {!moreOpen && (
+          <button type="button" onClick={() => setMoreOpen(true)}
+            className="mt-3 self-start text-[13px] font-bold text-gold underline decoration-dotted underline-offset-4 hover:text-ink">
+            + More options (colour, length, your own adventure)
+          </button>
+        )}
+        {moreOpen && (<>
+
         {/* Free-text: describe your own adventure */}
         <span className="mt-2.5 text-[13px] font-bold text-ink-muted">…or describe your own adventure <span className="font-semibold text-ink-muted/70">(optional)</span></span>
         <textarea value={customRequest} maxLength={600} rows={2}
@@ -123,6 +132,11 @@ export function Demo() {
             </Chip>
           ))}
         </div>
+        <button type="button" onClick={() => setMoreOpen(false)}
+          className="mt-3 self-start text-[13px] font-bold text-ink-muted underline decoration-dotted underline-offset-4 transition hover:text-ink">
+          − Fewer options
+        </button>
+        </>)}
 
         {/* Optional co-star */}
         {!costarOpen ? (
@@ -159,8 +173,21 @@ export function Demo() {
       {/* the dark night window — always dark */}
       <div className="night-panel flex min-h-[380px] flex-col justify-center rounded-2xl p-6" aria-live="polite">
         {!story && !loading && !error && (
-          <div className="flex flex-col items-center gap-4 text-center text-[#9fb0a4]">
-            <Mark size={54} pine="#E9E2D0" /><p>Your child&apos;s first visit to Lullawood will appear here.</p>
+          <div className="animate-fade">
+            <p className="mb-4 text-center text-[12px] font-bold uppercase tracking-wider text-[#7e9488]">An example</p>
+            <h3 className="h-display mb-3 text-center text-xl font-semibold italic text-gold">Willow and the Quiet Lantern</h3>
+            <p className="m-0 whitespace-pre-wrap text-[15.5px] leading-[1.7] text-cream/90">
+              {`When the moon rose over Lantern Village, Willow the rabbit found a lantern that had forgotten how to glow. "Don't worry," she whispered. "We'll find your light together."
+
+They walked the soft path to Moon Lake, past the sleeping willows, until the water lay still as glass. Willow held the lantern to the moon — and slowly, gently, it began to shine again, warm and golden.
+
+"There you are," she smiled. The lantern hummed softly, happy and sleepy all at once.
+
+And as the village dimmed and the stars settled in, Willow curled up in the clover, and the little lantern glowed beside her, soft and low.
+
+Goodnight, Lullawood. Goodnight, little one.`}
+            </p>
+            <p className="mt-5 text-center text-[12.5px] text-[#9fb0a4]">↑ This is just an example. Add your child above for their own.</p>
           </div>
         )}
         {loading && (
@@ -177,6 +204,36 @@ export function Demo() {
             <p className="m-0 whitespace-pre-wrap text-[16.5px] leading-[1.75] text-cream">
               {visible}{shown < story.length && <span className="caret" />}
             </p>
+            <div
+              className="lw-cta-card mt-9 rounded-2xl border border-gold/40 bg-[#fffdf4]/[.07] p-7 text-center"
+              style={{ animation: "lwRise .6s ease-out both" }}
+            >
+              <style>{`
+                @keyframes lwRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+                @keyframes lwGlow {
+                  0%, 100% { box-shadow: 0 10px 28px rgba(226,161,44,.35); }
+                  50% { box-shadow: 0 12px 40px rgba(226,161,44,.6); }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                  .lw-cta-card { animation: none !important; }
+                  .lw-cta-btn { animation: none !important; box-shadow: 0 10px 28px rgba(226,161,44,.4) !important; }
+                }
+              `}</style>
+              <p className="h-display text-[20px] font-semibold text-cream">
+                <span className="text-gold">✦</span> That was just one night in Lullawood <span className="text-gold">✦</span>
+              </p>
+              <p className="mx-auto mt-2.5 max-w-md text-[14.5px] leading-relaxed text-cream/75">
+                Every night, a brand-new story — one that remembers tonight&apos;s adventure and grows as they do.
+              </p>
+              <a
+                href={name ? `/signup?name=${encodeURIComponent(name)}&age=${encodeURIComponent(age)}&animal=${encodeURIComponent(animal)}` : "/signup"}
+                className="lw-cta-btn mt-6 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-9 py-4 text-[16px] font-bold text-[#3a2d05] transition hover:-translate-y-0.5"
+                style={{ animation: "lwGlow 2.8s ease-in-out infinite" }}
+              >
+                {name ? `Start ${name}'s free trial` : "Start your free trial"}
+              </a>
+              <p className="mt-3.5 text-[12.5px] text-cream/55">7 nights free · Cancel anytime · No charge today</p>
+            </div>
           </div>
         )}
       </div>

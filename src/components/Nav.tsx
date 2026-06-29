@@ -11,6 +11,7 @@ export function Nav({ overDark = false }: { overDark?: boolean }) {
           <span className="wordmark text-[22px] font-semibold">Lullawood</span>
         </Link>
         <nav className={`ml-auto hidden gap-7 text-[15px] font-semibold md:flex ${link}`}>
+          <Link href="/login" className={`hidden text-[15px] font-semibold md:block ${link}`}>Log in</Link>
           <a href="#try">Try a story</a>
           <a href="#how">How it works</a>
           <a href="#world">The world</a>

@@ -1,8 +1,15 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { signUp } from "@/lib/auth-client";
+import { Mark } from "@/components/Mark";
 
-export default function SignupPage() {
+function SignupForm() {
+  const params = useSearchParams();
+  const childName = (params.get("name") ?? "").trim();
+  const childAge = (params.get("age") ?? "").trim();
+  const childAnimal = (params.get("animal") ?? "").trim();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,17 +27,38 @@ export default function SignupPage() {
     });
     setLoading(false);
     if (error) {
-      setError(error.message || "Something went wrong. Please try again.");
+      const raw = error.message || "";
+      const friendly = /email/i.test(raw)
+        ? "Please enter a valid email address."
+        : /password/i.test(raw)
+        ? "Your password needs at least 8 characters."
+        : /exist|already/i.test(raw)
+        ? "An account with this email already exists. Try logging in."
+        : "Something went wrong. Please try again.";
+      setError(friendly);
       return;
     }
-    window.location.href = "/dashboard";
+    if (childName) {
+      const qs = new URLSearchParams({ name: childName });
+      if (childAge) qs.set("age", childAge);
+      if (childAnimal) qs.set("animal", childAnimal);
+      window.location.href = `/dashboard/children/new?${qs.toString()}`;
+    } else {
+      window.location.href = "/dashboard";
+    }
   }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-cream-paper px-4">
       <div className="w-full max-w-md rounded-3xl border border-border bg-white p-8 shadow-lift">
-        <h1 className="h-display mb-1 text-2xl font-semibold text-ink">Create your account</h1>
-        <p className="mb-6 text-[14px] text-ink-muted">Start your family&apos;s Lullawood.</p>
+        <div className="mb-5 flex justify-center"><Mark size={44} /></div>
+        <h1 className="h-display mb-1 text-center text-2xl font-semibold text-ink">Create your account</h1>
+        <p className="mb-2 text-center text-[14px] text-ink-muted">
+          {childName ? `Let's set up ${childName}'s Lullawood.` : "Start your family's Lullawood."}
+        </p>
+        <p className="mb-6 text-center text-[12.5px] text-ink-muted/80">
+          7-night free trial · No charge today · Cancel anytime
+        </p>
 
         <label className="mb-1 block text-[13px] font-bold text-ink-muted">Your name</label>
         <input value={name} onChange={(e) => setName(e.target.value)}
@@ -58,5 +86,13 @@ export default function SignupPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupForm />
+    </Suspense>
   );
 }

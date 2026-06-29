@@ -5,8 +5,7 @@ export function Pricing() {
   return (
     <section id="pricing" className="bg-parchment-deep py-[74px]">
       <div className="mx-auto max-w-6xl px-6">
-        <SectionHead eyebrow="Pricing" heading="Less than a single picture book a month." sub="Launching soon. Join the waitlist and founding families get first access — and a founding price." />
-        <div className="mt-12 grid grid-cols-1 items-stretch gap-6 md:grid-cols-3">
+            <SectionHead eyebrow="Pricing" heading="Less than a single picture book a month." sub="Every plan starts with a 7-day free trial. Cancel anytime before it ends and you won't be charged." />        <div className="mt-12 grid grid-cols-1 items-stretch gap-6 md:grid-cols-3">
           {TIERS.map((t) => (
             <div key={t.id}
               className={`relative flex flex-col rounded-[22px] border bg-cream-paper p-8 shadow-page ${
@@ -31,10 +30,10 @@ export function Pricing() {
                   </li>
                 ))}
               </ul>
-              <a href="#waitlist"
+             <a href="/signup"
                 className={`w-full rounded-full px-5 py-3 text-center text-[15px] font-bold transition hover:-translate-y-0.5 ${
                   t.featured ? "bg-gradient-to-b from-gold to-[#e3ac3c] text-[#3a2d05] shadow-[0_10px_28px_rgba(226,161,44,.4)]" : "border border-border bg-white text-ink hover:bg-cream-paper"}`}>
-                Join the waitlist
+                Start free trial
               </a>
             </div>
           ))}
