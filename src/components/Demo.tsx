@@ -174,21 +174,23 @@ export function Demo() {
       <div className="night-panel flex min-h-[380px] flex-col justify-center rounded-2xl p-6" aria-live="polite">
         {!story && !loading && !error && (
           <div className="animate-fade">
-            <p className="mb-4 text-center text-[12px] font-bold uppercase tracking-wider text-[#7e9488]">An example</p>
-            <h3 className="h-display mb-3 text-center text-xl font-semibold italic text-gold">Willow and the Quiet Lantern</h3>
+        <p className="mb-4 text-center text-[12px] font-bold uppercase tracking-wider text-[#7e9488]">An example · for Maya, age 6, who chose the ocean</p>
+            <h3 className="h-display mb-3 text-center text-xl font-semibold italic text-gold">Maya and the Tide of Lanterns</h3>
             <p className="m-0 whitespace-pre-wrap text-[15.5px] leading-[1.7] text-cream/90">
-              {`When the moon rose over Lantern Village, Willow the rabbit found a lantern that had forgotten how to glow. "Don't worry," she whispered. "We'll find your light together."
+              {`Maya had never seen the sea glow before. But tonight, down at Star Harbor, the water shimmered with a thousand tiny lanterns, drifting like sleepy stars.
 
-They walked the soft path to Moon Lake, past the sleeping willows, until the water lay still as glass. Willow held the lantern to the moon — and slowly, gently, it began to shine again, warm and golden.
+"Ready?" asked Fern, the little fox, hopping into a boat shaped like a crescent moon. Maya climbed in beside her, and together they pushed off into the soft, dark water.
 
-"There you are," she smiled. The lantern hummed softly, happy and sleepy all at once.
+They floated past Moon Lake, where the waves whispered hello, and a great gentle whale rose up to say goodnight. Maya reached out and touched one of the glowing lanterns — it was warm, like a tiny sun, and it hummed a song just for her.
 
-And as the village dimmed and the stars settled in, Willow curled up in the clover, and the little lantern glowed beside her, soft and low.
+"You found the brightest one," Fern smiled. "That one's yours to keep."
 
-Goodnight, Lullawood. Goodnight, little one.`}
+As the harbor grew quiet and the lanterns dimmed one by one, Maya tucked her glowing lantern close, and Fern curled up at her feet, and the little boat rocked them softly, softly toward sleep.
+
+Goodnight, Lullawood. Goodnight, Maya.`}
             </p>
-            <p className="mt-5 text-center text-[12.5px] text-[#9fb0a4]">↑ This is just an example. Add your child above for their own.</p>
-          </div>
+            <p className="mt-5 text-center text-[12.5px] text-[#9fb0a4]">↑ This is an example. Add your child above for a story made just for them.</p>
+        </div>
         )}
         {loading && (
           <div className="flex flex-col items-center gap-4 text-center text-[#9fb0a4]">
