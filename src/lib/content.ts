@@ -81,6 +81,9 @@ export const FAQS: Faq[] = [
   { q: "What ages is Lullawood for?", a: "It's tuned for roughly ages 2 to 8. You set your child's age and we adjust vocabulary, length, and tone to match." },
   { q: "Is this just more screen time?", a: "The opposite. Stories are written to be read aloud by you at bedtime — the screen stays in your hand, and your child just listens in the dark." },
   { q: "Can I cancel anytime?", a: "Yes. Every plan starts with a 7-day free trial and cancels in a click — no calls, no friction." },
+  { q: "What happens after the free trial?", a: "Your first 7 days are completely free. If you keep going, your plan begins at the price you chose and renews until you cancel. You can cancel any time in a click — and there's no charge if you cancel before day seven." },
+  { q: "Is my payment secure?", a: "Yes. All payments are handled by Stripe, the same secure provider trusted by millions of businesses worldwide. Your card details go straight to Stripe over an encrypted connection — Lullawood never sees or stores your full card number." },
+  { q: "How do I get the stories?", a: "Each evening, your child's new story is ready and waiting in Lullawood — just open it at bedtime and read it aloud together. Every story is yours to keep in your child's growing library." },
   { q: "How does \"Lullawood remembers\" work?", a: "Each child has their own private story world. Characters and adventures carry over night to night, so the stories build into one ongoing saga rather than disconnected one-offs." },
   { q: "Do you keep my child's data private?", a: "Your child's profile is used only to write their stories. We never sell data, and you can delete a profile and everything tied to it at any time. See our Privacy Policy for the full detail." },
 ];
