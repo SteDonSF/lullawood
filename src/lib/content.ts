@@ -72,7 +72,7 @@ export const ABOUT = {
     "So I built Lullawood. Every night it writes my boys into their own adventure — and now yours, too.",
   ],
   signature: "— Stephen, founder of Lullawood",
-  caption: "Stephen, with his two sons.",
+  caption: "The three of us, in Lullawood style.",
 };
 
 export type Faq = { q: string; a: string };
