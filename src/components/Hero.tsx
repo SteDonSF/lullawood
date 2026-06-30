@@ -25,6 +25,13 @@ export function Hero() {
             className="mt-8 inline-block rounded-full bg-gradient-to-b from-gold to-[#c47e1e] px-8 py-4 text-[16px] font-bold text-[#2a2007] shadow-[0_12px_32px_rgba(210,142,40,.5)] transition hover:-translate-y-0.5">
             {HERO.cta} →
           </a>
+          <p className="mt-5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] font-semibold text-cream-paper/85" style={{ textShadow: "0 1px 12px rgba(0,0,0,.5)" }}>
+            <span>Every story safety-reviewed</span>
+            <span className="text-gold/70">·</span>
+            <span>No ads, ever</span>
+            <span className="text-gold/70">·</span>
+            <span>Cancel anytime</span>
+          </p>
         </div>
       </div>
     </section>

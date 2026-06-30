@@ -18,9 +18,9 @@ export default function Home() {
     <main>
       <Hero />
 
-      <section id="try" className="py-[74px]">
+      <section id="try" className="pt-6 pb-[74px]">
         <div className="mx-auto max-w-6xl px-6">
-          <SectionHead eyebrow={DEMO.eyebrow} heading={DEMO.heading} sub={DEMO.sub} />
+          <SectionHead heading={DEMO.heading} sub={DEMO.sub} />
           <div className="mt-10"><Demo /></div>
         </div>
       </section>

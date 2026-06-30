@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Mark } from "./Mark";
 import { DEMO } from "@/lib/content";
 
@@ -15,6 +15,48 @@ const LENGTHS = [
   { label: "Long", min: 7, hint: "~7 min" },
 ];
 
+// Each chosen companion maps to a recurring Lullawood character illustration.
+const ANIMAL_CHAR: Record<string, string> = {
+  Fox: "char-fern", Bunny: "char-willow", Dragon: "char-nimbus", Owl: "char-oliver",
+  Whale: "char-waverley", Lion: "char-linden", Unicorn: "char-luna", Bear: "char-bramble",
+};
+function coverImageFor(animal: string) {
+  return `/art/${ANIMAL_CHAR[animal] ?? "char-fern"}.webp`;
+}
+
+// Split a story body into clean ~150-word pages, breaking ONLY on paragraph
+// boundaries — never mid-sentence. Page count is therefore approximate.
+function paginate(body: string, target = 85): string[] {
+  const hardMax = Math.round(target * 1.4);
+  const wc = (s: string): number => (s.trim().match(/\S+/g) || []).length;
+  const splitLong = (p: string): string[] => {
+    if (wc(p) <= hardMax) return [p];
+    const sentences = p.match(/[^.!?]+[.!?]+["'\u201d\u2019)\]]*\s*|[^.!?]+$/g) || [p];
+    const out: string[] = [];
+    let cur = "";
+    let curW = 0;
+    for (const s of sentences) {
+      const w = wc(s);
+      if (curW > 0 && curW + w > target) { out.push(cur.trim()); cur = ""; curW = 0; }
+      cur += s; curW += w;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  };
+  const paras = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const units = paras.flatMap(splitLong);
+  const pages: string[] = [];
+  let cur: string[] = [];
+  let curWords = 0;
+  for (const u of units) {
+    const w = wc(u);
+    if (cur.length > 0 && curWords + w > hardMax) { pages.push(cur.join("\n\n")); cur = [u]; curWords = w; }
+    else { cur.push(u); curWords += w; }
+  }
+  if (cur.length) pages.push(cur.join("\n\n"));
+  return pages.length ? pages : [body.trim()];
+}
+
 function Chip({ active, onClick, children, dot }: { active: boolean; onClick: () => void; children: React.ReactNode; dot?: string }) {
   return (
     <button type="button" onClick={onClick}
@@ -26,13 +68,154 @@ function Chip({ active, onClick, children, dot }: { active: boolean; onClick: ()
   );
 }
 
+/**
+ * StoryBook — a paged, book-style reader for one story.
+ * Slides: [cover, ...story pages, footer].
+ * Turn pages via Back/Next buttons, left/right arrow keys, or swipe (mobile).
+ */
+function StoryBook({
+  title, body, name, age, animal, footer, ctaName, ctaAge, ctaAnimal,
+}: {
+  title: string; body: string; name: string; age: string; animal: string;
+  footer: "cta" | "example";
+  ctaName?: string; ctaAge?: string; ctaAnimal?: string;
+}) {
+  const pages = useMemo(() => paginate(body), [body]);
+  const total = 1 + pages.length + 1; // cover + pages + footer
+  const [i, setI] = useState(0);
+  const touchX = useRef<number | null>(null);
+
+  const next = () => setI((n) => Math.min(total - 1, n + 1));
+  const prev = () => setI((n) => Math.max(0, n - 1));
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") prev();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
+
+  const onTouchStart = (e: React.TouchEvent) => { touchX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    if (dx < -45) next();
+    else if (dx > 45) prev();
+    touchX.current = null;
+  };
+
+  const isCover = i === 0;
+  const isFooter = i === total - 1;
+  const storyIndex = i - 1; // 0-based index into pages when on a story slide
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div key={i} className="animate-fade flex min-h-full flex-col justify-center">
+        {isCover && (
+          <div className="text-center">
+            <p className="mb-4 text-[12px] font-bold uppercase tracking-wider text-[#7e9488]">
+              {footer === "example" ? `An example · for ${name}, age ${age}` : "A Lullawood story"}
+            </p>
+            <img src={coverImageFor(animal)} alt=""
+              className="mx-auto mb-5 h-28 w-28 rounded-full object-cover ring-2 ring-gold/40"
+              style={{ boxShadow: "0 0 36px rgba(244,201,93,.25)" }} />
+            <h3 className="h-display mb-2 text-2xl font-semibold italic text-gold">{title}</h3>
+            <p className="text-[13.5px] text-cream/70">for {name || "your child"}{age ? `, age ${age}` : ""}</p>
+            <button type="button" onClick={next}
+              className="mt-6 inline-block rounded-full border border-gold/50 bg-white/[.06] px-7 py-2.5 text-[14px] font-bold text-cream transition hover:bg-white/[.12]">
+              Begin →
+            </button>
+          </div>
+        )}
+
+        {!isCover && !isFooter && (
+          <div className="space-y-4 text-[16.5px] leading-[1.8] text-cream">
+            {pages[storyIndex].split(/\n\s*\n/).map((para, idx) => (
+              <p key={idx} className="m-0">{para}</p>
+            ))}
+          </div>
+        )}
+
+        {isFooter && footer === "example" && (
+          <div className="text-center">
+            <p className="text-[14px] leading-relaxed text-[#9fb0a4]">
+              That was just a glimpse. Add your child&apos;s name above for a story made just for them.
+            </p>
+          </div>
+        )}
+
+        {isFooter && footer === "cta" && (
+          <div className="lw-cta-card rounded-2xl border border-gold/40 bg-[#fffdf4]/[.07] p-7 text-center" style={{ animation: "lwRise .6s ease-out both" }}>
+            <style>{`
+              @keyframes lwRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+              @keyframes lwGlow { 0%,100% { box-shadow: 0 10px 28px rgba(226,161,44,.35);} 50% { box-shadow: 0 12px 40px rgba(226,161,44,.6);} }
+              @media (prefers-reduced-motion: reduce) {
+                .lw-cta-card { animation: none !important; }
+                .lw-cta-btn { animation: none !important; box-shadow: 0 10px 28px rgba(226,161,44,.4) !important; }
+              }
+            `}</style>
+            <p className="h-display text-[20px] font-semibold text-cream">
+              <span className="text-gold">✦</span> That was just one night in Lullawood <span className="text-gold">✦</span>
+            </p>
+            <p className="mx-auto mt-2.5 max-w-md text-[14.5px] leading-relaxed text-cream/75">
+              Every night, a brand-new story — one that remembers tonight&apos;s adventure and grows as they do.
+            </p>
+            <a href={ctaName ? `/signup?name=${encodeURIComponent(ctaName)}&age=${encodeURIComponent(ctaAge ?? "")}&animal=${encodeURIComponent(ctaAnimal ?? "")}` : "/signup"}
+              className="lw-cta-btn mt-6 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-9 py-4 text-[16px] font-bold text-[#3a2d05] transition hover:-translate-y-0.5"
+              style={{ animation: "lwGlow 2.8s ease-in-out infinite" }}>
+              {ctaName ? `Start ${ctaName}'s free trial` : "Start your free trial"}
+            </a>
+            <p className="mt-3.5 text-[12.5px] text-cream/55">7 nights free · Cancel anytime · No charge today</p>
+          </div>
+        )}
+      </div>
+      </div>
+
+      {/* Page-turn controls */}
+      <div className="mt-5 flex items-center justify-between">
+        <button type="button" onClick={prev} disabled={i === 0}
+          className="rounded-full px-3 py-1.5 text-[13px] font-bold text-cream/80 transition enabled:hover:text-cream disabled:opacity-25"
+          aria-label="Previous page">← Back</button>
+
+        <div className="flex items-center gap-1.5" aria-hidden="true">
+          {Array.from({ length: total }).map((_, d) => (
+            <span key={d} className="h-[7px] w-[7px] rounded-full transition"
+              style={{ background: d === i ? "#E2A12C" : "rgba(255,253,244,.25)" }} />
+          ))}
+        </div>
+
+        <button type="button" onClick={next} disabled={i === total - 1}
+          className="rounded-full px-3 py-1.5 text-[13px] font-bold text-cream/80 transition enabled:hover:text-cream disabled:opacity-25"
+          aria-label="Next page">Next →</button>
+      </div>
+    </div>
+  );
+}
+
+const EXAMPLE_TITLE = "Maya and the Tide of Lanterns";
+const EXAMPLE_BODY = `Maya had never seen the sea glow before. But tonight, down at Star Harbor, the water shimmered with a thousand tiny lanterns, drifting like sleepy stars.
+
+"Ready?" asked Fern, the little fox, hopping into a boat shaped like a crescent moon. Maya climbed in beside her, and together they pushed off into the soft, dark water.
+
+They floated past Moon Lake, where the waves whispered hello, and a great gentle whale rose up to say goodnight. Maya reached out and touched one of the glowing lanterns — it was warm, like a tiny sun, and it hummed a song just for her.
+
+"You found the brightest one," Fern smiled. "That one's yours to keep."
+
+As the harbor grew quiet and the lanterns dimmed one by one, Maya tucked her glowing lantern close, and Fern curled up at her feet, and the little boat rocked them softly, softly toward sleep.
+
+Goodnight, Lullawood. Goodnight, Maya.`;
+
 export function Demo() {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [animal, setAnimal] = useState("Fox");
   const [adventure, setAdventure] = useState("The Ocean");
   const [color, setColor] = useState(COLORS[1]);
-  const [length, setLength] = useState(5);
+  const [length, setLength] = useState(3);
   const [customRequest, setCustomRequest] = useState("");
   const [costarOpen, setCostarOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -40,20 +223,17 @@ export function Demo() {
   const [costarAge, setCostarAge] = useState("8");
   const [loading, setLoading] = useState(false);
   const [story, setStory] = useState("");
-  const [shown, setShown] = useState(0);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!story) return;
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) { setShown(story.length); return; }
-    setShown(0); let i = 0;
-    const id = setInterval(() => { i += 2; setShown((s) => Math.min(story.length, s + 2)); if (i >= story.length) clearInterval(id); }, 16);
-    return () => clearInterval(id);
-  }, [story]);
+  // Snapshot of the inputs the current story was generated with (so the cover
+  // + CTA stay correct even if the parent edits the form afterwards).
+  const [told, setTold] = useState<{ name: string; age: string; animal: string } | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   async function generate() {
-    setLoading(true); setError(""); setStory(""); setShown(0);
+    setLoading(true); setError(""); setStory("");
+    // On mobile the story panel sits below the form — bring it into view.
+    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
     try {
       const ageNum = Math.max(1, Math.min(12, parseInt(age, 10) || 6));
       const costar = costarOpen && costarName.trim()
@@ -72,16 +252,17 @@ export function Demo() {
       const data = await res.json();
       if (!data.story) throw new Error("empty");
       setStory(data.story as string);
+      setTold({ name: name.trim(), age, animal });
+      requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
     } catch { setError("The storyteller nodded off for a moment. Try once more?"); }
     finally { setLoading(false); }
   }
 
-  const titleLine = story.split("\n")[0];
-  const body = story.slice(titleLine.length).trim();
-  const visible = body.slice(0, Math.max(0, shown - titleLine.length));
+  const storyTitle = story.split("\n")[0];
+  const storyBody = story.slice(storyTitle.length).trim();
 
   return (
-    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 rounded-3xl border border-border bg-cream-paper p-6 shadow-lift md:grid-cols-2 md:items-stretch">
+    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 rounded-3xl border border-border bg-cream-paper p-6 shadow-lift md:grid-cols-2 md:items-start">
       <div className="flex flex-col gap-2">
         {/* Name + age on one row */}
         <div className="flex gap-3">
@@ -165,78 +346,55 @@ export function Demo() {
 
         <button type="button" onClick={generate} disabled={loading}
           className="mt-4 w-full rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-6 py-3 text-[15px] font-bold text-[#3a2d05] shadow-[0_10px_28px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70">
-          {loading ? "Lighting the lamps…" : story ? "Write another" : "Read tonight's story"}
+          {loading ? (name.trim() ? `Writing ${name.trim()}'s story…` : "Writing your story…") : story ? "Write another" : "Read tonight's story"}
         </button>
         <p className="mt-2.5 text-center text-[12.5px] text-ink-muted/80">Free to try. No account, no email.</p>
+        <p className="mt-1 text-center text-[12px] font-semibold text-ink-muted/70">
+          Every story safety-reviewed · No ads, ever · Cancel anytime
+        </p>
       </div>
 
       {/* the dark night window — always dark */}
-      <div className="night-panel flex min-h-[380px] flex-col justify-center rounded-2xl p-6" aria-live="polite">
-        {!story && !loading && !error && (
-          <div className="animate-fade">
-        <p className="mb-4 text-center text-[12px] font-bold uppercase tracking-wider text-[#7e9488]">An example · for Maya, age 6, who chose the ocean</p>
-            <h3 className="h-display mb-3 text-center text-xl font-semibold italic text-gold">Maya and the Tide of Lanterns</h3>
-            <p className="m-0 whitespace-pre-wrap text-[15.5px] leading-[1.7] text-cream/90">
-              {`Maya had never seen the sea glow before. But tonight, down at Star Harbor, the water shimmered with a thousand tiny lanterns, drifting like sleepy stars.
-
-"Ready?" asked Fern, the little fox, hopping into a boat shaped like a crescent moon. Maya climbed in beside her, and together they pushed off into the soft, dark water.
-
-They floated past Moon Lake, where the waves whispered hello, and a great gentle whale rose up to say goodnight. Maya reached out and touched one of the glowing lanterns — it was warm, like a tiny sun, and it hummed a song just for her.
-
-"You found the brightest one," Fern smiled. "That one's yours to keep."
-
-As the harbor grew quiet and the lanterns dimmed one by one, Maya tucked her glowing lantern close, and Fern curled up at her feet, and the little boat rocked them softly, softly toward sleep.
-
-Goodnight, Lullawood. Goodnight, Maya.`}
-            </p>
-            <p className="mt-5 text-center text-[12.5px] text-[#9fb0a4]">↑ This is an example. Add your child above for a story made just for them.</p>
-        </div>
-        )}
+      <div ref={panelRef} className="night-panel flex h-[600px] min-h-0 flex-col rounded-2xl p-6" aria-live="polite">
         {loading && (
-          <div className="flex flex-col items-center gap-4 text-center text-[#9fb0a4]">
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center text-[#9fb0a4]">
             <div className="animate-pulse-moon h-[54px] w-[54px] rounded-full"
               style={{ background: "radial-gradient(circle at 36% 34%,#F4C95D,#d9af46 55%,#9c7e2f)", boxShadow: "0 0 40px rgba(244,201,93,.4)" }} />
             <p>Gathering moonlight and a {animal.toLowerCase()}…</p>
           </div>
         )}
-        {error && <p className="text-center font-semibold text-[#f2a488]">{error}</p>}
-        {story && (
-          <div className="animate-fade">
-            <h3 className="h-display mb-3.5 text-2xl font-semibold italic text-gold">{titleLine}</h3>
-            <p className="m-0 whitespace-pre-wrap text-[16.5px] leading-[1.75] text-cream">
-              {visible}{shown < story.length && <span className="caret" />}
-            </p>
-            <div
-              className="lw-cta-card mt-9 rounded-2xl border border-gold/40 bg-[#fffdf4]/[.07] p-7 text-center"
-              style={{ animation: "lwRise .6s ease-out both" }}
-            >
-              <style>{`
-                @keyframes lwRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-                @keyframes lwGlow {
-                  0%, 100% { box-shadow: 0 10px 28px rgba(226,161,44,.35); }
-                  50% { box-shadow: 0 12px 40px rgba(226,161,44,.6); }
-                }
-                @media (prefers-reduced-motion: reduce) {
-                  .lw-cta-card { animation: none !important; }
-                  .lw-cta-btn { animation: none !important; box-shadow: 0 10px 28px rgba(226,161,44,.4) !important; }
-                }
-              `}</style>
-              <p className="h-display text-[20px] font-semibold text-cream">
-                <span className="text-gold">✦</span> That was just one night in Lullawood <span className="text-gold">✦</span>
-              </p>
-              <p className="mx-auto mt-2.5 max-w-md text-[14.5px] leading-relaxed text-cream/75">
-                Every night, a brand-new story — one that remembers tonight&apos;s adventure and grows as they do.
-              </p>
-              <a
-                href={name ? `/signup?name=${encodeURIComponent(name)}&age=${encodeURIComponent(age)}&animal=${encodeURIComponent(animal)}` : "/signup"}
-                className="lw-cta-btn mt-6 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-9 py-4 text-[16px] font-bold text-[#3a2d05] transition hover:-translate-y-0.5"
-                style={{ animation: "lwGlow 2.8s ease-in-out infinite" }}
-              >
-                {name ? `Start ${name}'s free trial` : "Start your free trial"}
-              </a>
-              <p className="mt-3.5 text-[12.5px] text-cream/55">7 nights free · Cancel anytime · No charge today</p>
-            </div>
+
+        {!loading && error && (
+          <div className="flex flex-1 items-center justify-center">
+            <p className="text-center font-semibold text-[#f2a488]">{error}</p>
           </div>
+        )}
+
+        {!loading && !error && story && (
+          <StoryBook
+            key={story}
+            title={storyTitle}
+            body={storyBody}
+            name={told?.name || name.trim()}
+            age={told?.age ?? age}
+            animal={told?.animal || animal}
+            footer="cta"
+            ctaName={told?.name || name.trim()}
+            ctaAge={told?.age ?? age}
+            ctaAnimal={told?.animal || animal}
+          />
+        )}
+
+        {!loading && !error && !story && (
+          <StoryBook
+            key="example"
+            title={EXAMPLE_TITLE}
+            body={EXAMPLE_BODY}
+            name="Maya"
+            age="6"
+            animal="Fox"
+            footer="example"
+          />
         )}
       </div>
     </div>

@@ -113,5 +113,5 @@ export const CHARACTERS: Friend[] = [
 
 export const FINAL = {
   headline: "A story they'll remember long after they outgrow bedtime.",
-  cta: "Write their first story free",
+  cta: "Start your free trial",
 };

@@ -17,3 +17,6 @@
 # logs / misc
 *.log
 npm-debug.log*
+
+# OS + build junk
+*.tsbuildinfo
