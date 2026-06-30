@@ -23,6 +23,9 @@ export default function DashboardPage() {
   const [sub, setSub] = useState<Sub | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
+  const loadSub = () =>
+    fetch("/api/subscription").then((r) => r.json()).then((d) => setSub(d)).catch(() => setSub(null));
+
   useEffect(() => {
     if (!session) return;
     fetch("/api/profile")
@@ -30,10 +33,7 @@ export default function DashboardPage() {
       .then((d) => setChildren(d.children ?? []))
       .catch(() => setChildren([]))
       .finally(() => setLoadingKids(false));
-    fetch("/api/subscription")
-      .then((r) => r.json())
-      .then((d) => setSub(d))
-      .catch(() => setSub(null));
+    loadSub();
   }, [session]);
 
   if (isPending) {
@@ -122,21 +122,24 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-[15px] font-semibold text-ink">No active plan</p>
-                <p className="mt-1 text-[13px] text-ink-muted">
-                  Start a free trial to write tonight&apos;s story.
-                </p>
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[15px] font-semibold text-ink">No active plan</p>
+                  <p className="mt-1 text-[13px] text-ink-muted">
+                    Start a free trial to write tonight&apos;s story.
+                  </p>
+                </div>
+
+                <a
+                  href="/pricing"
+                  className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[13px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5"
+                >
+                  Choose a plan
+                </a>
               </div>
-              
-              <a
-                href="/pricing"
-                className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[13px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5"
-              >
-                Choose a plan
-              </a>
-            </div>
+              <ReviewerCodeField onRedeemed={loadSub} />
+            </>
           )}
         </section>
 
@@ -182,5 +185,65 @@ export default function DashboardPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function ReviewerCodeField({ onRedeemed }: { onRedeemed: () => void }) {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function redeem() {
+    if (!code.trim()) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/redeem-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code.trim() }),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        setMsg({ ok: true, text: "Access unlocked — enjoy Lullawood!" });
+        setCode("");
+        onRedeemed();
+      } else {
+        const errs: Record<string, string> = {
+          invalid_code: "That code isn't valid.",
+          code_expired: "That code has expired.",
+          code_used_up: "That code has been fully used.",
+          already_has_access: "You already have access.",
+        };
+        setMsg({ ok: false, text: errs[data.error] ?? "Couldn't redeem that code." });
+      }
+    } catch {
+      setMsg({ ok: false, text: "Something went wrong. Try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 border-t border-border pt-4">
+      <p className="text-[13px] font-semibold text-ink">Have a reviewer code?</p>
+      <div className="mt-2 flex gap-2">
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="LULLA-XXXXXX"
+          className="flex-1 rounded-full border border-border bg-white px-4 py-2 text-[13px] font-mono text-ink"
+        />
+        <button
+          onClick={redeem}
+          disabled={busy}
+          className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2 text-[13px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-60"
+        >
+          {busy ? "…" : "Redeem"}
+        </button>
+      </div>
+      {msg && (
+        <p className={`mt-2 text-[13px] ${msg.ok ? "text-green-700" : "text-red-600"}`}>{msg.text}</p>
+      )}
+    </div>
   );
 }
