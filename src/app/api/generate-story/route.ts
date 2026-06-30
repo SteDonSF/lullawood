@@ -32,9 +32,9 @@ import { getAccess } from "@/lib/subscription";
 
 export const runtime = "edge";
 
-const LIMIT = 5;            // demo: max generations
+const LIMIT = 20;           // demo: max generations per IP/hour (cost is negligible; this only blunts scripted abuse)
 const WINDOW_MIN = 60;      // demo: per this many minutes, per visitor
-const USER_LIMIT = 10;      // authed: soft per-user cap per hour (cost guard)
+const USER_LIMIT = 30;      // authed: soft per-user cap per hour (logged-in users get more rope than anon demo)
 const MEMORY_NIGHTS = 6;    // how many recent summaries feed tonight's story
 
 async function hashIp(ip: string): Promise<string> {

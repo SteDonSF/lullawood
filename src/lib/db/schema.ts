@@ -81,3 +81,25 @@ export const subscriptions = pgTable("subscriptions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const accessCodes = pgTable("access_codes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: text("code").notNull().unique(),
+  label: text("label"),
+  maxRedemptions: integer("max_redemptions").notNull().default(1),
+  redemptionsUsed: integer("redemptions_used").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const accessGrants = pgTable("access_grants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }).notNull(),
+  codeId: uuid("code_id").references(() => accessCodes.id, { onDelete: "set null" }),
+  source: text("source").notNull().default("reviewer"),
+  plan: text("plan").notNull().default("family"),
+  active: boolean("active").notNull().default(true),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

@@ -51,7 +51,10 @@ function SignupForm() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-cream-paper px-4">
       <div className="w-full max-w-md rounded-3xl border border-border bg-white p-8 shadow-lift">
-        <div className="mb-5 flex justify-center"><Mark size={44} /></div>
+        <a href="/" aria-label="Back to Lullawood" className="mb-6 flex flex-col items-center gap-2.5">
+          <Mark size={64} />
+          <span className="wordmark text-[28px] font-semibold text-ink">Lullawood</span>
+        </a>
         <h1 className="h-display mb-1 text-center text-2xl font-semibold text-ink">Create your account</h1>
         <p className="mb-2 text-center text-[14px] text-ink-muted">
           {childName ? `Let's set up ${childName}'s Lullawood.` : "Start your family's Lullawood."}

@@ -57,6 +57,50 @@ function paginate(body: string, target = 85): string[] {
   return pages.length ? pages : [body.trim()];
 }
 
+function GeneratingPanel({ name, animal, adventure }: { name: string; animal: string; adventure: string }) {
+  const who = name.trim() || "your child";
+  const pal = (animal || "friend").toLowerCase();
+  const char = (ANIMAL_CHAR[animal] || "char-fern").replace("char-", "").replace(/^./, (c) => c.toUpperCase());
+  const steps = useMemo(() => {
+    const s = [`Gathering moonlight and ${char} the ${pal} for ${who}…`];
+    if (adventure) s.push(`Tonight's adventure: ${adventure}…`);
+    s.push(`Writing ${who} into the story…`);
+    s.push("Adding a calm, sleepy ending…");
+    s.push("Almost ready…");
+    return s;
+  }, [who, pal, char, adventure]);
+  const [step, setStep] = useState(0);
+  const [pct, setPct] = useState(4);
+  useEffect(() => {
+    const t0 = Date.now();
+    const id = setInterval(() => {
+      const elapsed = (Date.now() - t0) / 1000;
+      setPct(Math.min(95, 4 + (elapsed / 15) * 91));
+      setStep(Math.min(steps.length - 1, Math.floor(elapsed / 3)));
+    }, 120);
+    return () => clearInterval(id);
+  }, [steps.length]);
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 text-center text-[#9fb0a4]">
+      <div className="animate-pulse-moon h-[54px] w-[54px] rounded-full"
+        style={{ background: "radial-gradient(circle at 36% 34%,#F4C95D,#d9af46 55%,#9c7e2f)", boxShadow: "0 0 40px rgba(244,201,93,.4)" }} />
+      <p className="min-h-[1.4em] text-[14px]">{steps[step]}</p>
+      <div className="h-[5px] w-[200px] max-w-[70%] overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%`, transition: "width .15s linear" }} />
+      </div>
+    </div>
+  );
+}
+
+function Chevron({ dir = "right" }: { dir?: "left" | "right" }) {
+  return (
+    <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden="true"
+      className="inline-block" style={{ transform: dir === "left" ? "scaleX(-1)" : undefined }}>
+      <path d="M1 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function Chip({ active, onClick, children, dot }: { active: boolean; onClick: () => void; children: React.ReactNode; dot?: string }) {
   return (
     <button type="button" onClick={onClick}
@@ -126,8 +170,8 @@ function StoryBook({
             <h3 className="h-display mb-2 text-2xl font-semibold italic text-gold">{title}</h3>
             <p className="text-[13.5px] text-cream/70">for {name || "your child"}{age ? `, age ${age}` : ""}</p>
             <button type="button" onClick={next}
-              className="mt-6 inline-block rounded-full border border-gold/50 bg-white/[.06] px-7 py-2.5 text-[14px] font-bold text-cream transition hover:bg-white/[.12]">
-              Begin →
+              className="mt-6 inline-flex items-center gap-1.5 rounded-full border border-gold/50 bg-white/[.06] px-7 py-2.5 text-[14px] font-bold text-cream transition hover:bg-white/[.12]">
+              Begin <Chevron dir="right" />
             </button>
           </div>
         )}
@@ -178,8 +222,8 @@ function StoryBook({
       {/* Page-turn controls */}
       <div className="mt-5 flex items-center justify-between">
         <button type="button" onClick={prev} disabled={i === 0}
-          className="rounded-full px-3 py-1.5 text-[13px] font-bold text-cream/80 transition enabled:hover:text-cream disabled:opacity-25"
-          aria-label="Previous page">← Back</button>
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-bold text-cream/80 transition enabled:hover:text-cream disabled:opacity-25"
+          aria-label="Previous page"><Chevron dir="left" />Back</button>
 
         <div className="flex items-center gap-1.5" aria-hidden="true">
           {Array.from({ length: total }).map((_, d) => (
@@ -189,8 +233,8 @@ function StoryBook({
         </div>
 
         <button type="button" onClick={next} disabled={i === total - 1}
-          className="rounded-full px-3 py-1.5 text-[13px] font-bold text-cream/80 transition enabled:hover:text-cream disabled:opacity-25"
-          aria-label="Next page">Next →</button>
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-bold text-cream/80 transition enabled:hover:text-cream disabled:opacity-25"
+          aria-label={isCover ? "Begin" : "Next page"}>{isCover ? "Begin" : "Next"}<Chevron dir="right" /></button>
       </div>
     </div>
   );
@@ -357,11 +401,7 @@ export function Demo() {
       {/* the dark night window — always dark */}
       <div ref={panelRef} className="night-panel flex h-[600px] min-h-0 flex-col rounded-2xl p-6" aria-live="polite">
         {loading && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center text-[#9fb0a4]">
-            <div className="animate-pulse-moon h-[54px] w-[54px] rounded-full"
-              style={{ background: "radial-gradient(circle at 36% 34%,#F4C95D,#d9af46 55%,#9c7e2f)", boxShadow: "0 0 40px rgba(244,201,93,.4)" }} />
-            <p>Gathering moonlight and a {animal.toLowerCase()}…</p>
-          </div>
+          <GeneratingPanel name={name} animal={animal} adventure={adventure} />
         )}
 
         {!loading && error && (

@@ -10,7 +10,7 @@
 //   treated as still-has-access for a window. Keep that policy HERE so it's
 //   consistent everywhere.
 // =============================================================================
-import { eq } from "drizzle-orm";
+import { eq, and, or, isNull, gt } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { PLAN_LIMITS, type PlanId } from "@/lib/stripe";
 
@@ -25,6 +25,38 @@ export type AccessInfo = {
 
 export async function getAccess(userId: string): Promise<AccessInfo> {
   const db = getDb();
+
+  // ---- Reviewer comp grant (separate access path; never touches Stripe) ----
+  // Active + unexpired grant → full (family) access. Otherwise fall through to
+  // the Stripe subscription lookup below, unchanged. Fails closed either way.
+  try {
+    const [grant] = await db
+      .select({ plan: schema.accessGrants.plan })
+      .from(schema.accessGrants)
+      .where(
+        and(
+          eq(schema.accessGrants.userId, userId),
+          eq(schema.accessGrants.active, true),
+          or(
+            isNull(schema.accessGrants.expiresAt),
+            gt(schema.accessGrants.expiresAt, new Date()),
+          ),
+        ),
+      )
+      .limit(1);
+    if (grant) {
+      const plan = ((grant.plan as PlanId) ?? "family");
+      return {
+        hasAccess: true,
+        plan,
+        status: "reviewer",
+        maxChildren: PLAN_LIMITS[plan]?.maxChildren ?? 4,
+      };
+    }
+  } catch {
+    // Grant lookup failed — fall through to Stripe (which also fails closed).
+  }
+
   let row:
     | { plan: string | null; status: string | null }
     | undefined;

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { signIn } from "@/lib/auth-client";
+import { Mark } from "@/components/Mark";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -27,8 +28,12 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-cream-paper px-4">
       <div className="w-full max-w-md rounded-3xl border border-border bg-white p-8 shadow-lift">
-        <h1 className="h-display mb-1 text-2xl font-semibold text-ink">Welcome back</h1>
-        <p className="mb-6 text-[14px] text-ink-muted">Log in to your family&apos;s Lullawood.</p>
+        <a href="/" aria-label="Back to Lullawood" className="mb-5 flex flex-col items-center gap-2.5">
+          <Mark size={64} />
+          <span className="wordmark text-[28px] font-semibold text-ink">Lullawood</span>
+        </a>
+        <h1 className="h-display mb-2 text-center text-2xl font-semibold text-ink">Welcome back</h1>
+        <p className="mb-7 text-center text-[14px] text-ink-muted">Log in to your family&apos;s Lullawood.</p>
 
         <label className="mb-1 block text-[13px] font-bold text-ink-muted">Email</label>
         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
@@ -52,6 +57,9 @@ export default function LoginPage() {
 
         <p className="mt-5 text-center text-[14px] text-ink-muted">
           New here? <a href="/signup" className="font-bold text-gold hover:underline">Create an account</a>
+        </p>
+        <p className="mt-4 text-center text-[12px] font-semibold text-ink-muted/70">
+          Every story safety-reviewed · No ads, ever · Cancel anytime
         </p>
       </div>
     </main>
