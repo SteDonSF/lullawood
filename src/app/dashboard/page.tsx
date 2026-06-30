@@ -191,11 +191,13 @@ export default function DashboardPage() {
 function ReviewerCodeField({ onRedeemed }: { onRedeemed: () => void }) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [unlocked, setUnlocked] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function redeem() {
     if (!code.trim()) return;
-    setBusy(true); setMsg(null);
+    setBusy(true);
+    setErr(null);
     try {
       const r = await fetch("/api/redeem-code", {
         method: "POST",
@@ -204,9 +206,8 @@ function ReviewerCodeField({ onRedeemed }: { onRedeemed: () => void }) {
       });
       const data = await r.json();
       if (r.ok) {
-        setMsg({ ok: true, text: "Access unlocked — enjoy Lullawood!" });
-        setCode("");
-        onRedeemed();
+        setUnlocked(true);
+        setTimeout(onRedeemed, 1400);
       } else {
         const errs: Record<string, string> = {
           invalid_code: "That code isn't valid.",
@@ -214,36 +215,52 @@ function ReviewerCodeField({ onRedeemed }: { onRedeemed: () => void }) {
           code_used_up: "That code has been fully used.",
           already_has_access: "You already have access.",
         };
-        setMsg({ ok: false, text: errs[data.error] ?? "Couldn't redeem that code." });
+        setErr(errs[data.error] ?? "Couldn't redeem that code.");
       }
     } catch {
-      setMsg({ ok: false, text: "Something went wrong. Try again." });
+      setErr("Something went wrong. Try again.");
     } finally {
       setBusy(false);
     }
   }
 
+  if (unlocked) {
+    return (
+      <div className="mt-5 overflow-hidden rounded-2xl border border-[#e8d9b5] bg-gradient-to-b from-[#fdf6e6] to-[#f7ecd2] px-6 py-7 text-center motion-safe:animate-[lw-fade_.5s_ease-out]">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] shadow-[0_8px_22px_rgba(226,161,44,.45)]">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3a2d05" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        </div>
+        <p className="h-display text-2xl font-semibold text-ink">You&apos;re in. ✨</p>
+        <p className="mx-auto mt-1.5 max-w-sm text-[14px] text-ink-muted">
+          Full Lullawood access — on us — for the next 60 days. Add your children below and
+          tonight&apos;s story is ready to write.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-5 border-t border-border pt-4">
-      <p className="text-[13px] font-semibold text-ink">Have a reviewer code?</p>
-      <div className="mt-2 flex gap-2">
+    <div className="mt-5 border-t border-border pt-5">
+      <p className="text-[13px] font-bold uppercase tracking-wide text-ink-muted">Have a reviewer code?</p>
+      <div className="mt-2.5 flex gap-2">
         <input
           value={code}
-          onChange={(e) => setCode(e.target.value)}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          onKeyDown={(e) => e.key === "Enter" && redeem()}
           placeholder="LULLA-XXXXXX"
-          className="flex-1 rounded-full border border-border bg-white px-4 py-2 text-[13px] font-mono text-ink"
+          className="flex-1 rounded-full border border-border bg-white px-4 py-2.5 text-[14px] font-mono tracking-wide text-ink placeholder:text-ink-muted/50 focus:border-[#d8c39a] focus:outline-none focus:ring-2 focus:ring-[rgba(226,161,44,.25)]"
         />
         <button
           onClick={redeem}
           disabled={busy}
-          className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2 text-[13px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-60"
+          className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-6 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-60"
         >
           {busy ? "…" : "Redeem"}
         </button>
       </div>
-      {msg && (
-        <p className={`mt-2 text-[13px] ${msg.ok ? "text-green-700" : "text-red-600"}`}>{msg.text}</p>
-      )}
+      {err && <p className="mt-2 text-[13px] text-red-600">{err}</p>}
     </div>
   );
 }

@@ -52,7 +52,8 @@ function NewChildForm() {
       setError(d.error || "Something went wrong saving. Please try again.");
       return;
     }
-    window.location.href = "/pricing";
+    const d = await res.json().catch(() => ({}));
+    window.location.href = d.child?.id ? `/dashboard/children/${d.child.id}` : "/dashboard";
   }
 
   const labelCls = "mb-1 block text-[13px] font-bold text-ink-muted";
