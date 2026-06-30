@@ -52,7 +52,7 @@ export const TESTIMONIALS: Testimonial[] = [
     name: "Sarah M.", detail: "Mum of two (4 & 7)", initials: "SM", stars: 5 },
   { quote: "What got me wasn\u2019t seeing Oliver\u2019s name in the story \u2014 it was how settled he was by the end of it. He actually wound down instead of getting a second wind.",
     name: "James & Emily R.", detail: "Parents of Oliver (5)", initials: "JR", stars: 5 },
-  { quote: "They read like proper bedtime books, not something a computer churned out. Beautifully written. We\u2019d happily collect these.",
+  { quote: "They read like proper bedtime books, not something a computer churned out. Beautifully written \u2014 my three all went quiet, which never happens.",
     name: "Hannah L.", detail: "Mum of three", initials: "HL", stars: 5 },
   { quote: "I travel a lot, so I tried recording one of the sample stories in my own voice for Ava. Being able to still do our story when I\u2019m away meant more to me than I expected.",
     name: "Michael T.", detail: "Dad of Ava (6)", initials: "MT", stars: 5 },
