@@ -20,3 +20,7 @@ npm-debug.log*
 
 # OS + build junk
 *.tsbuildinfo
+
+# UX audit capture output (generated screenshots/JSON)
+ux-audit/
+ux-audit-output/
