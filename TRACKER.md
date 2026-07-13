@@ -13,6 +13,24 @@
 - **P2:** 11/21 done
 - **P3:** 3/18 done
 - **Go-live:** all P0 gates cleared — Lullawood is LIVE (real-card path proven 30 Jun).
+- **Reviewer beta (Phase D · step 19):** IN PROGRESS — 5 family codes minted (expire 13 Sep 2026), Sonnet storytelling model live in prod.
+
+## Phase D — reviewer beta (IN PROGRESS · step 19)
+
+Getting real invited families into the product to gather beta feedback — the productive use of the review window (see `ROADMAP.md` §16). **Status: IN PROGRESS (14 Jul 2026).**
+
+- **Storytelling model → Sonnet.** `STORY_MODEL` switched `claude-haiku-4-5-20251001` → `claude-sonnet-4-6` in Cloudflare (Production, encrypted) and redeployed — deploy hash **`75516cce`**. The model ID was validated live against the Anthropic API before the switch (returned a valid response). Note: the code `DEFAULT_MODEL` was already `claude-sonnet-4-6`; the env had been pinned to Haiku during the earlier cost/speed experiment (see UX-9). Summaries stay on Haiku (`SUMMARY_MODEL`), which keeps the memory loop near-free.
+- **5 reviewer access codes minted (14 Jul).** Direct DB insert mirroring the Cloudflare-Access-walled mint route's `LULLA-XXXXXX` format (the HTTP mint route can't be called headlessly through the Access wall). Each grants **plan = family** on redemption — the redeem route hardcodes `family` (maxChildren 4 → reviewers can add multiple children and exercise sibling/co-star mode) — with **1 redemption** and **expiry 13 Sep 2026** (60-day redemption window). Admin-only, not secret:
+
+  | Label | Code |
+  |---|---|
+  | Reviewer-01 | `LULLA-XS3YHS` |
+  | Reviewer-02 | `LULLA-TZ4A77` |
+  | Reviewer-03 | `LULLA-D6C3PJ` |
+  | Reviewer-04 | `LULLA-2PCSMB` |
+  | Reviewer-05 | `LULLA-QH4UJ4` |
+
+  Reviewers sign up, then redeem their code (redeem-code flow) — each reviewer's access grant then runs its own 60 days from the moment they redeem. Verified in Neon: all 5 `active=true`, `used=0`, `max=1`.
 
 ## Open & in progress
 
