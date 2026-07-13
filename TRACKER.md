@@ -1,16 +1,16 @@
 # Lullawood — Tracker
 
 *Single source of truth for status. Edit inline (or via Claude Code). Pairs with `ROADMAP.md` (the narrative/why).*  
-**Last updated:** 01 Jul 2026
+**Last updated:** 14 Jul 2026
 
 **Legend:** `[x]` done · `[~]` in progress · `[ ]` open · `[-]` parked · Priority: **P0** blocks revenue · P1 next · P2 polish · P3 later
 
 ## Snapshot
 
-- **Overall:** 37/66 done (56%) — in progress 1, open 27, parked 1
+- **Overall:** 40/67 done (60%) — in progress 1, open 25, parked 1
 - **P0:** 5/5 done
-- **P1:** 10/13 done
-- **P2:** 10/21 done
+- **P1:** 11/13 done
+- **P2:** 11/21 done
 - **P3:** 3/18 done
 - **Go-live:** all P0 gates cleared — Lullawood is LIVE (real-card path proven 30 Jun).
 
@@ -18,12 +18,11 @@
 
 | | ID | Item | Pri | Area | Blocker / Owner | Notes |
 |---|---|---|---|---|---|---|
-| [ ] | V-1 | Test the episodic memory loop end-to-end | P1 | Phase 3 | — | Built but never user-tested. Generate 2–3 stories for one child; confirm continuity + anti-repetition actually fire. |
 | [ ] | V-3 | Error monitoring / observability | P1 | Operational maturity | — | No Sentry-equivalent. Silent generation/webhook failures in prod need to surface before real customers depend on nightly delivery. |
 | [ ] | V-4 | Stripe lifecycle emails (dunning) | P1 | Operational maturity | — | Trial-ending reminder, payment-failed/retry, cancellation confirmation. Stripe webhook events + Resend. Protects revenue directly. |
 | [~] | CS-1 | Co-star / sibling stories — free-text interim on child page | P2 | Phase 4 · Engine | Verify owed (SD) | DEPLOYED 30 Jun, sibling two-name generation test STILL OWED. Mode A of /api/generate-story now reads an optional 'adventure' free-text and folds it into customRequest (leads the block, 500-char cap); child page has an on-night-panel textarea threaded into writeStory(). A reviewer can type 'Leo (9) & Arno (8), brothers, on an adventure together' and get a sibling story. NOT structured co-star (no 2nd-child picker, no saved sibling-dynamic field, no two-profile weaving) — that stays a post-go-live build (E-2). CONFIRM: generate with box blank (normal single-child) AND with two names (both appear). |
 | [ ] | GR-3 | Retention coupon at cancel (Stripe portal) | P2 | Growth / Billing | — | Raised 30 Jun. Offer a discount to customers about to cancel in the Stripe customer portal (Cancellations -> Retention coupons). SEQUENCING: the coupon is a real Stripe object — create it in LIVE mode first (e.g. a % off for N months), THEN attach it in the portal config. Not a launch blocker. ETHICS CHECK (trust-brand): keep it a transparent offer, cancel stays one click away, easy to decline — a fair discount, NOT a dark pattern. Decide the offer (% + duration) sensible for a $8.99-12.99 product before creating. |
-| [ ] | H-8 | Nav: resolve 'Try a story' vs 'Try free' redundancy | P2 | Polish | — | Two CTAs likely both → demo. Confirm in nav component, consolidate. |
+| [x] | H-8 | Nav: resolve 'Try a story' vs 'Try free' redundancy | P2 | Polish | — | DONE & DEPLOYED 14 Jul (Phase B honesty sweep). Unified every CTA to one label per destination: /try demo = **"Try free"** (Nav pill, Hero, homepage teaser, how-it-works nav + primary CTA — was mixed with "Write their first story free"); /signup trial = **"Start free trial"** (Pricing, FinalCTA, Demo generic fallback — was mixed with "Start your free trial"; Demo keeps the personalized "Start [name]'s free trial"); /pricing button = **"See plans"** (homepage teaser + how-it-works — was "See plans & start free" / "See pricing"). Nav category link "Pricing" left as-is (nav label, not a CTA). |
 | [ ] | H-9 | Surface trust/safety signal in hero or demo | P2 | Polish / Trust | — | Enhancement. AI+kids = anxious parents; trust is the growth strategy. |
 | [ ] | HK-1 | Welcome email on signup | P2 | Housekeeping | — | Resend; warm first touch. |
 | [ ] | HK-7 | Leftover /waitlist route → redirect or delete | P2 | Housekeeping | SD (reopened 29 Jun) | REOPENED 29 Jun PM — was marked Done prematurely. src/app/waitlist/page.tsx surfaced as a LIVE, still-deployed /waitlist page in the storybook commit (dead since the waitlist removal). Decide with the rest of the orphan family: delete /waitlist + /start + /api/waitlist + Waitlist.tsx together, or redirect. |
@@ -51,6 +50,8 @@
 
 | | ID | Item | Pri | Area | Blocker / Owner | Notes |
 |---|---|---|---|---|---|---|
+| [x] | V-1 | Test the episodic memory loop end-to-end | P1 | Phase 3 | — | DONE 14 Jul — CONFIRMED BY EXECUTION (twice). Ran scripts/memory-loop-test.ts against prod Neon: created a throwaway user+child, generated 3 sequential stories via the real Mode A path (buildStoryPrompt → generateStory → summarizeStory). (a) all 3 wrote a non-empty summary row to the stories table; (b) episodic memory fed forward AND compounded — story 2's prompt CONTINUITY block carried 1 prior summary, story 3's carried 2 (prior-night summaries appeared verbatim). Anti-repetition line fires whenever previousAdventures is non-empty. Throwaway data cascade-deleted afterwards (nothing left in Neon). Harness + Playwright specs landed in Phase C. |
+| [x] | RT-1 | Shareable/indexable routes — de-#anchor the site (Phase A steps 1-6) | P2 | SEO / IA | — | DONE & DEPLOYED 09 Jul (Wrangler-direct, prod verified). Turned homepage-only `#anchor` CTAs into real, linkable pages. **(1)** Inventoried every `#` link (Nav, Hero, Footer, checkout cancel_url). **(2)** `/pricing` confirmed canonical; homepage `#pricing`→`/pricing`; homepage Pricing card body DELETED (was re-rendering the same TIERS copy) → now a teaser + link; added `<link rel=canonical https://lullawood.com/pricing>` via a server page.tsx wrapping the client PricingClient. **(3)** New `/how-it-works` route — standalone page (own title + meta desc + canonical), homepage keeps a 3-step teaser + CTA. **(4)** New `/try` route — moved `<Demo />` there (component + `/api/generate-story` byte-unchanged, so rate-limit/session identical); homepage keeps a demo teaser + CTA. **(5)** Left `#world`/`#about`/`#faq` as homepage scroll-anchors (not enough standalone content); `/safety` already a real route. **(6)** Kept `id=try|how|pricing` on the homepage teasers so any external `/#try`/`/#how`/`/#pricing` fragment still lands correctly (server never sees fragments, so no next.config redirect possible/needed). Deleted orphaned components HowItWorks.tsx + Pricing.tsx. Verified bytes on disk (§3a) + live prod: /try, /how-it-works, /pricing all 200 with correct canonicals; homepage nav carries zero `#` CTAs. Partially retires the 'bare #anchors break on sub-pages' concern in NAV-1. |
 | [x] | GL-1 | Stripe go-live: switch test → live mode | P0 | Phase 5 · Revenue | CLEARED 30 Jun | DONE 30 Jun — LIVE REAL-CARD TEST PASSED. Signed up for Dreamer monthly with a real card in live Stripe -> checkout completed -> LIVE WEBHOOK wrote a correct subscriptions row to Neon (cus_UnsFo9eMSaGfOo, sub_...FJUf3Z1GL0, price_...FJUf3Z1GL0 = the $8.99 live price) -> getAccess() flipped -> dashboard shows trial to 7 July. Stripe account review CLEARED. API-version mismatch (code 2024-06-20 vs webhook 2026-06-24.dahlia) RETIRED — row wrote cleanly, non-issue. Lullawood is LIVE and can take real money. NOTE: cancel this test sub before 7 Jul so SD's real card isn't charged. |
 | [x] | GL-2 | Business entity decision | P0 | Phase 5 · Legal | SD (decided) | Decided: starting in Newforge Advisory Partners LLC. (Docs flagged that running a children's-data payments business through the advisory entity mixes liability vs. a dedicated Lullawood LLC — accepted to start; can revisit / spin out later.) |
 | [x] | GL-3 | PwC outside-business-activity / independence disclosure | P0 | Phase 5 · Legal | SD / PwC (cleared) | Cleared — discussed with PwC already; no conflicts identified. (Was the HARD gate.) |
