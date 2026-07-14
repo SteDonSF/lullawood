@@ -145,28 +145,50 @@ export async function POST(req: NextRequest) {
       recurringCharacters: child.recurringCharacters ?? [], // threaded for durable layer
     };
 
-    try {
-      const raw = await generateStory(buildStoryPrompt(ctx as any));
-      if (!raw) throw new Error("empty");
-      const { title, story } = splitTitle(raw);
+    // STREAM the story text so the first words reach the parent in ~1-2s instead
+    // of a ~20s blank wait. The memory loop (summarise + save) runs on the full
+    // accumulated text, before the stream closes, so it reliably fires.
+    const encoder = new TextEncoder();
+    let full = "";
+    const readable = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let got = false;
+        try {
+          for await (const delta of streamStory(buildStoryPrompt(ctx as any))) {
+            if (!delta) continue;
+            got = true;
+            full += delta;
+            controller.enqueue(encoder.encode(delta));
+          }
+          if (!got) throw new Error("empty");
 
-      // ----- SAVE: store the story, then summarise for tomorrow -----
-      // Summary is best-effort (helper swallows its own errors); we still save
-      // the story even if the summary comes back empty.
-      const summary = await summarizeStory(story, child.name);
-      try {
-        await db.insert(schema.stories).values({
-          childId,
-          title: title || "A Lullawood story",
-          body: story,
-          summary: summary || null,
-        });
-      } catch { /* never let a save hiccup break delivery */ }
+          // ----- SAVE + memory: split title, summarise, store the finished story.
+          // Runs on the full text before close(); summary is best-effort. -----
+          const { title, story } = splitTitle(full);
+          const summary = await summarizeStory(story, child.name);
+          try {
+            await db.insert(schema.stories).values({
+              childId,
+              title: title || "A Lullawood story",
+              body: story,
+              summary: summary || null,
+            });
+          } catch { /* never let a save hiccup break delivery */ }
 
-      return NextResponse.json({ story, title });
-    } catch {
-      return NextResponse.json({ error: "generation_failed" }, { status: 500 });
-    }
+          controller.close();
+        } catch (err) {
+          try { controller.error(err); } catch { /* already closed */ }
+        }
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        "x-accel-buffering": "no",
+      },
+    });
   }
 
   // ---------- MODE B: anonymous demo (UNCHANGED behaviour) ----------

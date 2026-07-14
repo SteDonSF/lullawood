@@ -26,6 +26,7 @@ export const runtime = "edge";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
+import { Mark } from "@/components/Mark";
 
 type Child = {
   id: string;
@@ -46,11 +47,13 @@ export default function ChildViewPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  // story generation state
+  // story generation state. `story` holds the raw streamed text (first line = the
+  // title, the rest the body); we derive title/body at render.
   const [generating, setGenerating] = useState(false);
+  const [streaming, setStreaming] = useState(false); // true once the first chunk arrives
   const [story, setStory] = useState<string>("");
-  const [storyTitle, setStoryTitle] = useState<string>("");
   const [genError, setGenError] = useState("");
+  const [tonight, setTonight] = useState("");
 
   useEffect(() => {
     if (!session || !id) return;
@@ -67,24 +70,51 @@ export default function ChildViewPage() {
   async function writeStory() {
     setGenError("");
     setStory("");
-    setStoryTitle("");
+    setStreaming(false);
     setGenerating(true);
-    // File 4 makes /api/generate-story accept a childId and build the prompt
-    // from the saved profile. We send childId; the server does the rest.
-    const res = await fetch("/api/generate-story", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ childId: id }),
-    });
-    setGenerating(false);
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setGenError(d.error || "Couldn't write a story just now. Please try again.");
-      return;
+    // /api/generate-story reads the childId, builds the prompt from the saved
+    // profile, and STREAMS the story text back (text/event-stream).
+    let acc = "";
+    try {
+      const res = await fetch("/api/generate-story", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ childId: id, adventure: tonight.trim() || undefined }),
+      });
+      if (!res.ok || !res.body) {
+        const d = await res.json().catch(() => ({}));
+        setGenError(d.error || "Couldn't write a story just now. Please try again.");
+        return;
+      }
+      // Read the stream: first chunk flips the spinner to growing text.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let started = false;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (!chunk) continue;
+        acc += chunk;
+        if (!started) { started = true; setStreaming(true); }
+        setStory(acc);
+      }
+      acc += decoder.decode();
+      if (!acc.trim()) throw new Error("empty");
+      setStory(acc);
+    } catch {
+      // If usable text arrived before the break, keep it; else show the error.
+      if (acc.trim().length > 40) {
+        setStory(acc);
+        setGenError("The story was cut short — tap “Write another” to try again.");
+      } else {
+        setGenError("Couldn't write a story just now. Please try again.");
+        setStory("");
+      }
+    } finally {
+      setGenerating(false);
+      setStreaming(false);
     }
-    const d = await res.json();
-    setStory(d.story ?? d.body ?? "");
-    setStoryTitle(d.title ?? "");
   }
 
   if (isPending || loading) {
@@ -120,6 +150,12 @@ export default function ChildViewPage() {
     ...(child.interests ?? []),
   ].filter(Boolean);
 
+  // The story arrives as raw streamed text — first line is the title, the rest
+  // the body. Derive both for rendering (works while streaming and when done).
+  const rawNl = story.indexOf("\n");
+  const renderTitle = rawNl === -1 ? "" : story.slice(0, rawNl).trim();
+  const renderBodyParas = (rawNl === -1 ? story : story.slice(rawNl)).trim().split(/\n\s*\n/);
+
   return (
     <main className="min-h-screen bg-cream-paper px-4 py-10">
       <div className="mx-auto w-full max-w-2xl">
@@ -128,7 +164,12 @@ export default function ChildViewPage() {
         </a>
 
         {/* Profile card */}
-        <section className="mb-6 rounded-3xl border border-border bg-white p-8 shadow-lift">
+        <section className="mb-6 rounded-3xl warm-card p-8">
+          <a href="/dashboard" className="mb-6 flex items-center gap-2.5">
+            <Mark size={28} ring="#D28E28" pine="#2A3422" accent="#D28E28" />
+            <span className="wordmark text-[18px] font-semibold text-ink">Lullawood</span>
+            <span className="ml-auto eyebrow-caps text-[11px] text-gold-text">A new story every night</span>
+          </a>
           <div className="mb-4 flex items-baseline justify-between">
             <h1 className="h-display text-3xl font-semibold text-ink">{child.name}</h1>
             <span className="text-[14px] text-ink-muted">
@@ -158,32 +199,58 @@ export default function ChildViewPage() {
         </section>
 
         {/* Tonight's story */}
-        <section className="rounded-3xl border border-border bg-white p-8 shadow-lift">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="h-display text-xl font-semibold text-ink">Tonight&apos;s story</h2>
+        <section className="night-panel rounded-3xl p-8">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <h2 className="h-display text-xl font-semibold text-cream-paper">Tonight&apos;s story</h2>
             <button onClick={writeStory} disabled={generating}
-              className="rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-70">
+              className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-70">
               {generating ? "Writing…" : story ? "Write another" : "Write tonight's story"}
             </button>
           </div>
 
-          {genError && <p className="mb-3 text-[14px] font-semibold text-[#c2553d]">{genError}</p>}
+          <div className="mb-5">
+            <textarea
+              value={tonight}
+              onChange={(e) => setTonight(e.target.value)}
+              disabled={generating}
+              rows={2}
+              maxLength={500}
+              placeholder={`Anything special for tonight? e.g. ${child.name} and a sibling on an adventure together`}
+              className="w-full resize-none rounded-2xl border border-[#2f4a44] bg-[#1b2e28] px-4 py-3 text-[14px] text-cream-paper placeholder:text-cream-paper/40 outline-none focus:border-gold/60 focus:ring-2 focus:ring-gold/20"
+            />
+            <p className="mt-1.5 text-[12px] text-cream-paper/50">Optional. Leave blank for a story from {child.name}&apos;s saved profile.</p>
+          </div>
+
+          {genError && <p className="mb-3 text-[14px] font-semibold text-[#f0b8a8]">{genError}</p>}
 
           {!story && !generating && (
-            <p className="text-[14px] text-ink-muted">
+            <p className="text-[14px] leading-relaxed text-cream-paper/70">
               A fresh story for {child.name}, written for who they are tonight. It&apos;ll appear here.
             </p>
           )}
 
-          {generating && (
-            <p className="text-[14px] text-ink-muted">Writing a story just for {child.name}…</p>
+          {generating && !streaming && (
+            <div className="py-6 text-center">
+              <div className="mx-auto mb-3 h-2 w-2 rounded-full bg-gold animate-pulse-moon" />
+              <p className="text-[14px] text-cream-paper/80">Writing a story just for {child.name}…</p>
+            </div>
           )}
 
           {story && (
-            <article className="mt-2">
-              {storyTitle && <h3 className="h-display mb-3 text-lg font-semibold text-ink">{storyTitle}</h3>}
-              {/* plain prose, no markdown — preserve paragraph breaks */}
-              <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink">{story}</div>
+            <article className="animate-fade">
+              {renderTitle && (
+                <h3 className="h-display mb-4 text-center text-2xl font-semibold italic text-gold">{renderTitle}</h3>
+              )}
+              <div className="space-y-4 text-[16.5px] leading-[1.8] text-cream-paper">
+                {renderBodyParas.map((para, idx) => (
+                  <p key={idx} className="m-0">
+                    {para}
+                    {streaming && idx === renderBodyParas.length - 1 && (
+                      <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[3px] animate-pulse rounded bg-gold/80 align-middle" />
+                    )}
+                  </p>
+                ))}
+              </div>
             </article>
           )}
         </section>
