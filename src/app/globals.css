@@ -32,6 +32,13 @@ body {
   border: 1px solid #102019;
 }
 
+/* warm light card — cream, soft warm border, gold-tinged lift */
+.warm-card {
+  background: linear-gradient(180deg, #FBF6EA 0%, #F7EFDD 100%);
+  border: 1px solid #EADBBE;
+  box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 14px 34px rgba(120,90,30,.10);
+}
+
 @keyframes lw-pulse { 0%,100%{transform:scale(.92);opacity:.8} 50%{transform:scale(1.06);opacity:1} }
 @keyframes lw-fade { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
 @keyframes lw-blink { 50%{opacity:0} }

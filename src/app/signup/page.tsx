@@ -50,7 +50,7 @@ function SignupForm() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-cream-paper px-4">
-      <div className="w-full max-w-md rounded-3xl border border-border bg-white p-8 shadow-lift">
+      <div className="w-full max-w-md rounded-3xl warm-card p-8">
         <a href="/" aria-label="Back to Lullawood" className="mb-6 flex flex-col items-center gap-2.5">
           <Mark size={64} />
           <span className="wordmark text-[28px] font-semibold text-ink">Lullawood</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Mark } from "@/components/Mark";
 
 type Code = {
   id: string;
@@ -92,6 +93,11 @@ export default function AdminDashboard() {
   return (
     <main className="min-h-screen bg-cream-paper px-4 py-10">
       <div className="mx-auto w-full max-w-2xl">
+        <a href="/dashboard" className="mb-8 flex items-center gap-2.5">
+          <Mark size={28} ring="#D28E28" pine="#2A3422" accent="#D28E28" />
+          <span className="wordmark text-[18px] font-semibold text-ink">Lullawood</span>
+          <span className="ml-auto eyebrow-caps text-[11px] text-gold-text">A new story every night</span>
+        </a>
         <header className="mb-8">
           <h1 className="h-display text-3xl font-semibold text-ink">Reviewer access codes</h1>
           <p className="mt-1 text-[14px] text-ink-muted">
@@ -100,7 +106,7 @@ export default function AdminDashboard() {
           </p>
         </header>
 
-        <section className="mb-6 rounded-3xl border border-border bg-white p-8 shadow-lift">
+        <section className="mb-6 rounded-3xl warm-card p-8">
           <h2 className="text-[15px] font-semibold text-ink">Mint a code</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <div>
