@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
+import { Mark } from "@/components/Mark";
 
 type Child = {
   id: string;
@@ -67,7 +68,10 @@ export default function DashboardPage() {
 
   const planLabel = sub?.plan === "family" ? "Family" : sub?.plan === "dreamer" ? "Dreamer" : null;
   const statusLabel =
-    sub?.status === "trialing" ? "Free trial" : sub?.status === "active" ? "Active" : sub?.status ?? "";
+    sub?.status === "trialing" ? "Free trial"
+      : sub?.status === "active" ? "Active"
+      : sub?.status === "reviewer" ? "Reviewer"
+      : sub?.status ?? "";
   const trialDate = sub?.trialEnd
     ? new Date(sub.trialEnd).toLocaleDateString(undefined, { month: "long", day: "numeric" })
     : null;
@@ -77,6 +81,11 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-cream-paper px-4 py-10">
       <div className="mx-auto w-full max-w-2xl">
+        <a href="/dashboard" className="mb-8 flex items-center gap-2.5">
+          <Mark size={30} ring="#D28E28" pine="#2A3422" accent="#D28E28" />
+          <span className="wordmark text-[20px] font-semibold text-ink">Lullawood</span>
+          <span className="ml-auto eyebrow-caps text-[11px] text-gold-text">A new story every night</span>
+        </a>
         <header className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="h-display text-3xl font-semibold text-ink">
@@ -92,7 +101,7 @@ export default function DashboardPage() {
           </button>
         </header>
 
-        <section className="mb-6 rounded-3xl border border-border bg-white p-6 shadow-lift">
+        <section className="mb-6 rounded-3xl warm-card p-6">
           {sub?.hasAccess ? (
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -113,13 +122,20 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
-              <button
-                onClick={openPortal}
-                disabled={portalLoading}
-                className="shrink-0 rounded-full border border-border bg-white px-5 py-2.5 text-[13px] font-bold text-ink-muted transition hover:border-[#d8c39a] hover:text-ink disabled:opacity-60"
-              >
-                {portalLoading ? "Opening…" : "Manage subscription"}
-              </button>
+              {sub.status === "reviewer" ? (
+                // Reviewer comp access has no Stripe customer — nothing to manage.
+                <span className="shrink-0 rounded-full bg-cream-paper px-5 py-2.5 text-[13px] font-bold text-ink-muted">
+                  Complimentary access
+                </span>
+              ) : (
+                <button
+                  onClick={openPortal}
+                  disabled={portalLoading}
+                  className="shrink-0 rounded-full border border-border bg-white px-5 py-2.5 text-[13px] font-bold text-ink-muted transition hover:border-[#d8c39a] hover:text-ink disabled:opacity-60"
+                >
+                  {portalLoading ? "Opening…" : "Manage subscription"}
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -143,7 +159,7 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <section className="rounded-3xl border border-border bg-white p-8 shadow-lift">
+        <section className="rounded-3xl warm-card p-8">
           <div className="mb-5 flex items-center justify-between">
             <h2 className="h-display text-xl font-semibold text-ink">Your children</h2>
             <a
@@ -165,22 +181,33 @@ export default function DashboardPage() {
               </p>
             </div>
           ) : (
+            <>
+            {children.length > 0 && (
+              <p className="mb-3 text-[13px] text-ink-muted">Tap a child to write tonight&apos;s story.</p>
+            )}
             <ul className="space-y-3">
               {children.map((c) => (
                 <li key={c.id}>
                   
                   <a
                     href={`/dashboard/children/${c.id}`}
-                    className="flex items-center justify-between rounded-2xl border border-border bg-white px-5 py-4 transition hover:border-[#d8c39a]"
+                    className="group flex items-center justify-between rounded-2xl border border-border bg-white px-5 py-4 shadow-lift transition hover:-translate-y-0.5 hover:border-gold/50"
                   >
-                    <span className="text-[16px] font-semibold text-ink">{c.name}</span>
-                    <span className="text-[13px] text-ink-muted">
-                      {c.age != null ? `age ${c.age}` : "age not set"}
+                    <span className="flex items-center gap-3">
+                      <span className="text-[16px] font-semibold text-ink">{c.name}</span>
+                      <span className="text-[13px] text-ink-muted">
+                        {c.age != null ? `age ${c.age}` : "age not set"}
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[13px] font-bold text-gold-text transition group-hover:gap-2.5">
+                      Tonight&apos;s story
+                      <span aria-hidden>&rarr;</span>
                     </span>
                   </a>
                 </li>
               ))}
             </ul>
+            </>
           )}
         </section>
       </div>

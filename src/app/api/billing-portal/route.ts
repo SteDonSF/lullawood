@@ -31,8 +31,11 @@ export async function POST(req: NextRequest) {
     .where(eq(schema.subscriptions.userId, user.id))
     .limit(1);
 
+  // No Stripe customer → nothing to portal to. This is the reviewer-grant case
+  // (comp access with no Stripe subscription); the dashboard hides the button
+  // for them, so this is defence in depth.
   if (!sub?.customerId) {
-    return NextResponse.json({ error: "No subscription to manage" }, { status: 404 });
+    return NextResponse.json({ error: "reviewer" }, { status: 422 });
   }
 
   const stripe = getStripe();
