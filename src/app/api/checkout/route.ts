@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     // Belt-and-braces: also tag the session so the webhook can recover the user.
     metadata: { userId: user.id, plan },
     success_url: `${APP_URL}/dashboard?welcome=1`,
-    cancel_url: `${APP_URL}/#pricing`,
+    cancel_url: `${APP_URL}/pricing`,
     allow_promotion_codes: true,
   });
 
