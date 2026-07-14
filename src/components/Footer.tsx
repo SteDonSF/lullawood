@@ -6,17 +6,17 @@ export function Footer() {
     <footer className="border-t border-border py-12">
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 px-6 md:grid-cols-4">
         <div className="md:col-span-2">
-          <div className="flex items-center gap-2.5 text-ink"><Mark size={26} /><span className="wordmark text-lg font-semibold">Lullawood</span></div>
+          <Link href="/" className="flex items-center gap-2.5 text-ink"><Mark size={26} /><span className="wordmark text-lg font-semibold">Lullawood</span></Link>
           <p className="h-display mt-1 text-[15px] italic text-gold-text">Stories for little dreamers</p>
           <p className="mt-3 max-w-xs text-[14px] text-ink-muted">A bedtime world, made for one child at a time. A new story every night, yours to read aloud.</p>
         </div>
         <div>
           <p className="text-[13px] font-bold uppercase tracking-wide text-ink-muted">Lullawood</p>
           <ul className="mt-3 space-y-2 text-[14px] text-ink-muted">
-            <li><a href="#how" className="hover:text-ink">How it works</a></li>
-            <li><a href="#pricing" className="hover:text-ink">Pricing</a></li>
-            <li><a href="#about" className="hover:text-ink">Our story</a></li>
-            <li><a href="#faq" className="hover:text-ink">FAQ</a></li>
+            <li><Link href="/how-it-works" className="hover:text-ink">How it works</Link></li>
+            <li><Link href="/pricing" className="hover:text-ink">Pricing</Link></li>
+            <li><a href="/#about" className="hover:text-ink">Our story</a></li>
+            <li><a href="/#faq" className="hover:text-ink">FAQ</a></li>
           </ul>
         </div>
         <div>
