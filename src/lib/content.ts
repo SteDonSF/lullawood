@@ -16,7 +16,7 @@ export const HERO = {
 export const DEMO = {
   eyebrow: "See the magic first",
   heading: "Type your child's name. Watch their story appear.",
-  sub: "No account, no email. Just a glimpse of what arrives every night.",
+  sub: "No account, no email. Just a glimpse of the story you'll create together every night.",
 };
 
 export type Reason = { title: string; body: string; art: string };
@@ -32,18 +32,37 @@ export const REASONS: Reason[] = [
 export type Step = { n: string; title: string; body: string; art: string };
 export const STEPS: Step[] = [
   { n: "One", title: "Tell us about your child", body: "Their name, the animals and worlds they love, a bedtime. Two minutes, once.", art: "how-1" },
-  { n: "Two", title: "Open it at bedtime", body: "When it's time for bed, tonight's fresh story is ready and waiting — open Lullawood and read it aloud together.", art: "how-2" },
+  { n: "Two", title: "Open it at bedtime", body: "When it's time for bed, open Lullawood and write tonight's story — a fresh adventure, created on the spot from their profile, ready in moments to read aloud together.", art: "how-2" },
   { n: "Three", title: "They drift off as the hero", body: "The adventure ends, the characters fall asleep, and so does your child.", art: "how-3" },
 ];
 
 export type Tier = {
   id: string; name: string; price: number; cadence: string; year: string;
-  blurb: string; features: string[]; featured?: boolean;
+  monthly: string; yearly: string;
+  blurb: string; features: string[]; featured?: boolean; highlighted?: boolean;
 };
 export const TIERS: Tier[] = [
-  { id: "dreamer", name: "Dreamer", price: 8.99, cadence: "/mo", year: "or $89.99/year", blurb: "One child, every night.", features: ["A new story nightly", "Recurring characters", "A consistent magical world", "Stories that remember"] },
-  { id: "family", name: "Family", price: 12.99, cadence: "/mo", year: "or $129.99/year", blurb: "Up to four children.", features: ["Everything in Dreamer", "Up to 4 child profiles", "Sibling co-star mode", "Per-child bedtimes"], featured: true },
+  { id: "dreamer", name: "Dreamer", price: 8.99, cadence: "/mo", year: "or $89.99/year",
+    monthly: "$8.99", yearly: "$89.99",
+    blurb: "One child, every night.",
+    features: [
+      "A new story every night, starring your child",
+      "Beloved characters who return night after night",
+      "A magical world that remembers your child",
+      "Written for exactly who your child is today — and who they'll be as they grow",
+    ] },
+  { id: "family", name: "Family", price: 12.99, cadence: "/mo", year: "or $129.99/year",
+    monthly: "$12.99", yearly: "$129.99",
+    blurb: "One world your children share.",
+    features: [
+      "One magical world your children grow up in together",
+      "Up to four children, each with their own stories & memory",
+      "Sibling co-star adventures — your kids together, in one story",
+      "A bedtime tuned to each child",
+    ], featured: true, highlighted: true },
 ];
+export const BADGE = "Most loved";
+export const TRUST_STRIP = ["Safe by design", "Private — never sold or shared", "No ads, ever", "Cancel anytime"];
 
 // Testimonials: real words from real test families.
 export type Testimonial = { quote: string; name: string; detail: string; initials: string; stars: number };
@@ -83,7 +102,7 @@ export const FAQS: Faq[] = [
   { q: "Can I cancel anytime?", a: "Yes. Every plan starts with a 7-day free trial and cancels in a click — no calls, no friction." },
   { q: "What happens after the free trial?", a: "Your first 7 days are completely free. If you keep going, your plan begins at the price you chose and renews until you cancel. You can cancel any time in a click — and there's no charge if you cancel before day seven." },
   { q: "Is my payment secure?", a: "Yes. All payments are handled by Stripe, the same secure provider trusted by millions of businesses worldwide. Your card details go straight to Stripe over an encrypted connection — Lullawood never sees or stores your full card number." },
-  { q: "How do I get the stories?", a: "Each evening, your child's new story is ready and waiting in Lullawood — just open it at bedtime and read it aloud together. Every story is yours to keep in your child's growing library." },
+  { q: "How do I get the stories?", a: "You create each night's story inside Lullawood. At bedtime, open your child's profile and tap to write tonight's story — it's ready in moments to read aloud together. (Automatic scheduled delivery each evening is on our roadmap; for now you open Lullawood and create the story on demand.)" },
   { q: "How does \"Lullawood remembers\" work?", a: "Each child has their own private story world. Characters and adventures carry over night to night, so the stories build into one ongoing saga rather than disconnected one-offs." },
   { q: "Do you keep my child's data private?", a: "Your child's profile is used only to write their stories. We never sell data, and you can delete a profile and everything tied to it at any time. See our Privacy Policy for the full detail." },
 ];
@@ -113,5 +132,5 @@ export const CHARACTERS: Friend[] = [
 
 export const FINAL = {
   headline: "A story they'll remember long after they outgrow bedtime.",
-  cta: "Start your free trial",
+  cta: "Start free trial",
 };
