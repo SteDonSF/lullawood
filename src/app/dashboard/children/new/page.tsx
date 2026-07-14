@@ -18,9 +18,40 @@ function NewChildForm() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Dreamer-at-limit state: message + whether an upgrade path exists (Family isn't top-capped).
+  const [atLimit, setAtLimit] = useState<{ message: string; canUpgrade: boolean } | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
+
+  // Same checkout flow as the /pricing CTAs: POST /api/checkout -> Stripe hosted URL.
+  async function upgradeToFamily() {
+    setError("");
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: "family", interval: "monthly" }),
+      });
+      if (res.status === 401) {
+        window.location.href = "/login?next=/dashboard/children/new";
+        return;
+      }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.url) {
+        setError(d.error || "Couldn't start checkout. Please try again.");
+        setUpgrading(false);
+        return;
+      }
+      window.location.href = d.url; // -> Stripe hosted checkout (Family monthly)
+    } catch {
+      setError("Couldn't start checkout. Please try again.");
+      setUpgrading(false);
+    }
+  }
 
   async function handleSave() {
     setError("");
+    setAtLimit(null);
     if (!name.trim()) { setError("Please enter your child's name."); return; }
 
     setSaving(true);
@@ -44,7 +75,14 @@ function NewChildForm() {
     }
     if (res.status === 403) {
       const d = await res.json().catch(() => ({}));
-      setError(d.message || "You've reached your plan's child limit.");
+      if (d.error === "child_limit") {
+        setAtLimit({
+          message: d.message || "You've reached your plan's child limit.",
+          canUpgrade: d.plan === "dreamer",
+        });
+      } else {
+        setError(d.message || "You've reached your plan's child limit.");
+      }
       return;
     }
     if (!res.ok) {
@@ -67,8 +105,11 @@ function NewChildForm() {
           &larr; Back to dashboard
         </a>
 
-        <div className="rounded-3xl border border-border bg-white p-8 shadow-lift">
-          <div className="mb-4 flex justify-center"><Mark size={40} /></div>
+        <div className="rounded-3xl warm-card p-8">
+          <a href="/dashboard" aria-label="Back to dashboard" className="mb-4 flex flex-col items-center gap-2">
+            <Mark size={40} />
+            <span className="wordmark text-[20px] font-semibold text-ink">Lullawood</span>
+          </a>
           <h1 className="h-display mb-1 text-center text-2xl font-semibold text-ink">
             {seedName ? `Tell us about ${seedName}` : "Add a child"}
           </h1>
@@ -101,6 +142,21 @@ function NewChildForm() {
           <label className={labelCls}>Never include <span className="font-normal">(separate with commas)</span></label>
           <input value={avoid} onChange={(e) => setAvoid(e.target.value)} className={inputCls}
             placeholder="e.g. spiders, thunderstorms" />
+
+          {atLimit && (
+            <div className="mb-4 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5 text-center">
+              <p className="text-[14.5px] font-semibold text-ink">{atLimit.message}</p>
+              {atLimit.canUpgrade && (
+                <>
+                  <button type="button" onClick={upgradeToFamily} disabled={upgrading}
+                    className="mt-3 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-7 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_20px_rgba(226,161,44,.35)] transition hover:-translate-y-0.5 disabled:opacity-70">
+                    {upgrading ? "Starting…" : "Upgrade to Family →"}
+                  </button>
+                  <p className="mt-2.5 text-[12px] text-ink-muted">Up to 4 children · sibling co-star stories · $12.99/mo</p>
+                </>
+              )}
+            </div>
+          )}
 
           {error && <p className="mb-4 text-[14px] font-semibold text-[#c2553d]">{error}</p>}
 

@@ -49,9 +49,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: "child_limit",
+          plan: access.plan, // lets the UI show an "Upgrade to Family" CTA for Dreamer only
           message:
             access.plan === "dreamer"
-              ? "The Dreamer plan includes one child. Upgrade to Family to add more."
+              ? "The Dreamer plan includes one child."
               : `Your plan includes up to ${access.maxChildren} children.`,
         },
         { status: 403 }
