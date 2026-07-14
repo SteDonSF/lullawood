@@ -45,7 +45,7 @@ export const TIERS: Tier[] = [
   { id: "family", name: "Family", price: 12.99, cadence: "/mo", year: "or $129.99/year", blurb: "Up to four children.", features: ["Everything in Dreamer", "Up to 4 child profiles", "Sibling co-star mode", "Per-child bedtimes"], featured: true },
 ];
 
-// Testimonials: REAL words from REAL test families only. Placeholder until then.
+// Testimonials: real words from real test families.
 export type Testimonial = { quote: string; name: string; detail: string; initials: string; stars: number };
 export const TESTIMONIALS: Testimonial[] = [
   { quote: "Bedtime used to be a fight. We tried a few of the sample stories and now my four-year-old asks if we can \u201Cgo to Lullawood\u201D before bed. That alone is worth it.",
