@@ -5,6 +5,9 @@ Steps:
 1. Run the capture script: npx tsx scripts/ux-audit.ts
    Confirm it completed by checking the manifest.json in the newest ux-audit/<timestamp>/ folder.
 
+1b. Run the interactive E2E journey suite: npx tsx scripts/run-journeys.ts
+   It drives real user journeys (anon demo streaming, reviewer dashboard, Dreamer child-limit upgrade, …) against the live site using the seeded test accounts in .env.local. Record each journey's PASS / FAIL / SKIP — and on any FAIL, the exact failing assertion — and fold the results into the report as a "User journeys" section. A journey FAIL is at least a P1 (a broken real-user flow); judge severity by which flow broke.
+
 2. Find the previous audit folder (second-most-recent under ux-audit/) if one exists, for diffing later.
 
 3. Read UX-RUBRIC.md in full before evaluating anything.
