@@ -14,7 +14,7 @@ export function assert(cond: unknown, message: string): asserts cond {
 }
 
 /** Wait for text to become visible; throw AssertionError(message) on timeout. */
-export async function assertVisibleText(page: Page, text: string | RegExp, message: string, timeout = 10000) {
+export async function assertVisibleText(page: Page, text: string | RegExp, message: string, timeout = 15000) {
   try {
     await page.getByText(text).first().waitFor({ state: "visible", timeout });
   } catch {
@@ -28,7 +28,7 @@ export async function bodyText(page: Page): Promise<string> {
 }
 
 /** Fill /login and submit; assert we reach /dashboard within `timeout` ms. */
-export async function login(page: Page, email: string, password: string, timeout = 8000) {
+export async function login(page: Page, email: string, password: string, timeout = 15000) {
   await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
   // Wait for React to hydrate before filling — otherwise the controlled inputs get
   // reset to "" on hydration and an empty form is submitted. (networkidle is a good

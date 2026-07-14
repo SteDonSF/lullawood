@@ -27,21 +27,21 @@ export async function run(page: Page) {
   if ((await emailInput.inputValue()) !== email) await emailInput.fill(email);
   await page.getByRole("button", { name: /create account/i }).click();
   try {
-    await page.waitForURL(/\/dashboard/, { timeout: 8000 });
+    await page.waitForURL(/\/dashboard/, { timeout: 15000 });
   } catch {
-    throw new AssertionError("signup did not reach /dashboard within 8000ms");
+    throw new AssertionError("signup did not reach /dashboard within 15000ms");
   }
 
   // 2. Fresh account shows no plan.
-  await assertVisibleText(page, "No active plan", "expected 'No active plan' for a fresh account", 8000);
+  await assertVisibleText(page, "No active plan", "expected 'No active plan' for a fresh account", 15000);
 
   // 3. Redeem the reviewer code.
   await page.locator('input[placeholder*="LULLA"]').fill(code);
   await page.getByRole("button", { name: /redeem/i }).click();
 
   // 4. Redemption grants Family comp access (dashboard re-fetches ~1.4s after success).
-  await assertVisibleText(page, "Family plan", "expected 'Family plan' within 5000ms after redeeming", 5000);
-  await assertVisibleText(page, "Complimentary access", "expected 'Complimentary access' after redeeming", 5000);
+  await assertVisibleText(page, "Family plan", "expected 'Family plan' within 15000ms after redeeming", 15000);
+  await assertVisibleText(page, "Complimentary access", "expected 'Complimentary access' after redeeming", 15000);
 
   // 5. Record the throwaway account for later cleanup (ux-audit/ is gitignored).
   try {

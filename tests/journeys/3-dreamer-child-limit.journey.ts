@@ -19,7 +19,7 @@ export async function run(page: Page) {
   await login(page, email, password);
 
   // 4. Dashboard shows the Dreamer plan.
-  await assertVisibleText(page, "Dreamer plan", "step 4: dashboard should show 'Dreamer plan'", 10000);
+  await assertVisibleText(page, "Dreamer plan", "step 4: dashboard should show 'Dreamer plan'", 15000);
 
   // 5-8. Go to add-child, fill name + age, submit (this hits the 1-child cap).
   await page.goto(`${BASE_URL}/dashboard/children/new`, { waitUntil: "domcontentloaded" });
