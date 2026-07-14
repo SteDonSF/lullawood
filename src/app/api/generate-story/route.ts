@@ -24,7 +24,7 @@
 // =============================================================================
 import { NextRequest, NextResponse } from "next/server";
 import { sql, eq, and, desc } from "drizzle-orm";
-import { generateStory, summarizeStory } from "@/lib/anthropic";
+import { generateStory, summarizeStory, streamStory } from "@/lib/anthropic";
 import { buildStoryPrompt } from "@/lib/story/prompt";
 import { getDb, schema } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
@@ -128,6 +128,9 @@ export async function POST(req: NextRequest) {
       ? `Do NOT repeat the plots of recent nights listed under continuity — tonight must be a fresh adventure, though familiar friends and places may return.`
       : "";
 
+    const tonight = String((body as any).adventure ?? "").trim().slice(0, 500);
+    const tonightLine = tonight ? `Tonight's request from the parent: ${tonight}` : "";
+
     const ctx = {
       profile: {
         name: child.name,
@@ -136,7 +139,7 @@ export async function POST(req: NextRequest) {
         colors: child.colors ?? [],
       },
       animal,
-      customRequest: [aboutLine, avoidLine, antiRepeat].filter(Boolean).join("\n\n") || undefined,
+      customRequest: [tonightLine, aboutLine, avoidLine, antiRepeat].filter(Boolean).join("\n\n") || undefined,
       targetMinutes: cleanMinutes((body as any).targetMinutes, 5),
       previousAdventures,                                  // <- the memory, fed in
       recurringCharacters: child.recurringCharacters ?? [], // threaded for durable layer
@@ -185,41 +188,61 @@ export async function POST(req: NextRequest) {
     }
   } catch { /* fail open */ }
 
-  try {
-    const { name, age, animal, adventure, color, targetMinutes, customRequest, costar } = body as any;
-    const cleanName = (name || "a curious little one").toString().slice(0, 40);
-    const childAge = cleanAge(age);
-    const minutes = cleanMinutes(targetMinutes);
-    const cleanCustom = customRequest ? customRequest.toString().slice(0, 600) : undefined;
+  const { name, age, animal, adventure, color, targetMinutes, customRequest, costar } = body as any;
+  const cleanName = (name || "a curious little one").toString().slice(0, 40);
+  const childAge = cleanAge(age);
+  const minutes = cleanMinutes(targetMinutes);
+  const cleanCustom = customRequest ? customRequest.toString().slice(0, 600) : undefined;
 
-    let cleanCostar: { name: string; age?: number } | undefined;
-    if (costar && typeof costar === "object" && costar.name && costar.name.toString().trim()) {
-      cleanCostar = { name: costar.name.toString().slice(0, 40), age: cleanAge(costar.age, childAge) };
-    }
-
-    const prompt = buildStoryPrompt({
-      profile: { name: cleanName, age: childAge },
-      targetMinutes: minutes,
-      customRequest: cleanCustom,
-      costar: cleanCostar,
-      animal, adventure, color,
-    });
-    const story = await generateStory(prompt);
-    if (!story) throw new Error("empty");
-
-    try {
-      await db.insert(schema.demoEvents).values({
-        ipHash, childName: cleanName,
-        animal: (animal || "").toString().slice(0, 40),
-        adventure: (adventure || "").toString().slice(0, 40),
-        color: (color || "").toString().slice(0, 40),
-        ok: true,
-      });
-    } catch {}
-
-    return NextResponse.json({ story });
-  } catch {
-    try { await db.insert(schema.demoEvents).values({ ipHash, ok: false }); } catch {}
-    return NextResponse.json({ error: "generation_failed" }, { status: 500 });
+  let cleanCostar: { name: string; age?: number } | undefined;
+  if (costar && typeof costar === "object" && costar.name && costar.name.toString().trim()) {
+    cleanCostar = { name: costar.name.toString().slice(0, 40), age: cleanAge(costar.age, childAge) };
   }
+
+  const prompt = buildStoryPrompt({
+    profile: { name: cleanName, age: childAge },
+    targetMinutes: minutes,
+    customRequest: cleanCustom,
+    costar: cleanCostar,
+    animal, adventure, color,
+  });
+
+  // STREAM the story text as it's generated, so the first words reach the demo in
+  // ~1-2s instead of a ~20s blank wait. Rate-limiting already ran above; the
+  // demo_events log runs after the text finishes (inside the stream, before close).
+  const encoder = new TextEncoder();
+  const readable = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let got = false;
+      try {
+        for await (const delta of streamStory(prompt)) {
+          if (!delta) continue;
+          got = true;
+          controller.enqueue(encoder.encode(delta));
+        }
+        if (!got) throw new Error("empty");
+        try {
+          await db.insert(schema.demoEvents).values({
+            ipHash, childName: cleanName,
+            animal: (animal || "").toString().slice(0, 40),
+            adventure: (adventure || "").toString().slice(0, 40),
+            color: (color || "").toString().slice(0, 40),
+            ok: true,
+          });
+        } catch {}
+        controller.close();
+      } catch (err) {
+        try { await db.insert(schema.demoEvents).values({ ipHash, ok: false }); } catch {}
+        try { controller.error(err); } catch {}
+      }
+    },
+  });
+
+  return new Response(readable, {
+    headers: {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      "x-accel-buffering": "no",
+    },
+  });
 }

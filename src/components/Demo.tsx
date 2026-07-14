@@ -211,7 +211,7 @@ function StoryBook({
             <a href={ctaName ? `/signup?name=${encodeURIComponent(ctaName)}&age=${encodeURIComponent(ctaAge ?? "")}&animal=${encodeURIComponent(ctaAnimal ?? "")}` : "/signup"}
               className="lw-cta-btn mt-6 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-9 py-4 text-[16px] font-bold text-[#3a2d05] transition hover:-translate-y-0.5"
               style={{ animation: "lwGlow 2.8s ease-in-out infinite" }}>
-              {ctaName ? `Start ${ctaName}'s free trial` : "Start your free trial"}
+              {ctaName ? `Start ${ctaName}'s free trial` : "Start free trial"}
             </a>
             <p className="mt-3.5 text-[12.5px] text-cream/55">7 nights free · Cancel anytime · No charge today</p>
           </div>
@@ -253,6 +253,37 @@ As the harbor grew quiet and the lanterns dimmed one by one, Maya tucked her glo
 
 Goodnight, Lullawood. Goodnight, Maya.`;
 
+/**
+ * StreamingStory — shows the story text as it streams in (before it's paged into
+ * the StoryBook). First line is treated as the title; the rest grows paragraph by
+ * paragraph with a pulsing caret, auto-scrolling to keep the newest text in view.
+ */
+function StreamingStory({ text }: { text: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { const el = ref.current; if (el) el.scrollTop = el.scrollHeight; }, [text]);
+  const nl = text.indexOf("\n");
+  const title = nl === -1 ? "" : text.slice(0, nl).trim();
+  const body = (nl === -1 ? text : text.slice(nl)).trim();
+  const paras = body.split(/\n\s*\n/);
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div ref={ref} className="min-h-0 flex-1 overflow-y-auto">
+        {title && <h3 className="h-display mb-4 text-center text-2xl font-semibold italic text-gold">{title}</h3>}
+        <div className="space-y-4 text-[16.5px] leading-[1.8] text-cream">
+          {paras.map((p, i) => (
+            <p key={i} className="m-0">
+              {p}
+              {i === paras.length - 1 && (
+                <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[3px] animate-pulse rounded bg-gold/80 align-middle" />
+              )}
+            </p>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Demo() {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -266,6 +297,8 @@ export function Demo() {
   const [costarName, setCostarName] = useState("");
   const [costarAge, setCostarAge] = useState("8");
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false); // true once the first streamed chunk arrives
+  const [streamError, setStreamError] = useState(false); // stream broke mid-way but some text arrived
   const [story, setStory] = useState("");
   const [error, setError] = useState("");
 
@@ -275,14 +308,15 @@ export function Demo() {
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   async function generate() {
-    setLoading(true); setError(""); setStory("");
+    setLoading(true); setStreaming(false); setStreamError(false); setError(""); setStory("");
     // On mobile the story panel sits below the form — bring it into view.
     requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    const ageNum = Math.max(1, Math.min(12, parseInt(age, 10) || 6));
+    const costar = costarOpen && costarName.trim()
+      ? { name: costarName.trim().slice(0, 24), age: Math.max(1, Math.min(12, parseInt(costarAge, 10) || ageNum)) }
+      : undefined;
+    let acc = "";
     try {
-      const ageNum = Math.max(1, Math.min(12, parseInt(age, 10) || 6));
-      const costar = costarOpen && costarName.trim()
-        ? { name: costarName.trim().slice(0, 24), age: Math.max(1, Math.min(12, parseInt(costarAge, 10) || ageNum)) }
-        : undefined;
       const res = await fetch("/api/generate-story", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -292,14 +326,45 @@ export function Demo() {
           costar,
         }),
       });
-      if (!res.ok) throw new Error("bad");
-      const data = await res.json();
-      if (!data.story) throw new Error("empty");
-      setStory(data.story as string);
+      if (!res.ok || !res.body) throw new Error("bad");
+
+      // Snapshot inputs now so the cover/CTA stay correct even if the form changes.
       setTold({ name: name.trim(), age, animal });
-      requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
-    } catch { setError("The storyteller nodded off for a moment. Try once more?"); }
-    finally { setLoading(false); }
+
+      // Read the streamed story text and render it as it arrives. First chunk
+      // (~1-2s) flips the spinner to growing text; pagination waits for the end.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let started = false;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (!chunk) continue;
+        acc += chunk;
+        if (!started) { started = true; setStreaming(true); }
+        setStory(acc);
+        panelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+      acc += decoder.decode();
+      if (!acc.trim()) throw new Error("empty");
+      setStory(acc);
+      setStreaming(false); // stream complete -> render the paged StoryBook
+    } catch {
+      // If usable text arrived before the break, keep it (StoryBook renders the
+      // partial with a note); otherwise show the fallback error.
+      if (acc.trim().length > 40) {
+        setStory(acc);
+        setStreaming(false);
+        setStreamError(true);
+      } else {
+        setError("The storyteller nodded off for a moment. Try once more?");
+        setStory("");
+        setStreaming(false);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   const storyTitle = story.split("\n")[0];
@@ -400,8 +465,12 @@ export function Demo() {
 
       {/* the dark night window — always dark */}
       <div ref={panelRef} className="night-panel flex h-[600px] min-h-0 flex-col rounded-2xl p-6" aria-live="polite">
-        {loading && (
+        {loading && !streaming && (
           <GeneratingPanel name={name} animal={animal} adventure={adventure} />
+        )}
+
+        {loading && streaming && (
+          <StreamingStory text={story} />
         )}
 
         {!loading && error && (
@@ -410,7 +479,18 @@ export function Demo() {
           </div>
         )}
 
-        {!loading && !error && story && (
+        {!loading && !error && streamError && story && (
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto text-[16.5px] leading-[1.8] text-cream">
+              {story.split(/\n\s*\n/).map((p, i) => <p key={i} className="m-0">{p}</p>)}
+            </div>
+            <p className="mt-4 text-center text-[13px] font-semibold text-[#f2a488]">
+              The story was cut short — tap &quot;Write another&quot; to try again.
+            </p>
+          </div>
+        )}
+
+        {!loading && !error && !streamError && story && (
           <StoryBook
             key={story}
             title={storyTitle}
@@ -425,7 +505,7 @@ export function Demo() {
           />
         )}
 
-        {!loading && !error && !story && (
+        {!loading && !error && !streamError && !story && (
           <StoryBook
             key="example"
             title={EXAMPLE_TITLE}

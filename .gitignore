@@ -24,3 +24,6 @@ npm-debug.log*
 # UX audit capture output (generated screenshots/JSON)
 ux-audit/
 ux-audit-output/
+
+# wrangler local dev secrets
+.dev.vars

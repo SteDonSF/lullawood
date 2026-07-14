@@ -27,6 +27,27 @@ export async function generateStory(userPrompt: string): Promise<string> {
     .join("\n")
     .trim();
 }
+// Streaming variant of generateStory: yields text deltas as they arrive from
+// Anthropic, so the first words reach the demo in ~1-2s instead of a ~20s blank
+// wait. Same model/params as generateStory. Edge-safe (the SDK streams over
+// fetch — no Node stream APIs).
+export async function* streamStory(userPrompt: string): AsyncGenerator<string> {
+  const client = getAnthropic();
+  const stream = await client.messages.create({
+    model: process.env.STORY_MODEL ?? DEFAULT_MODEL,
+    max_tokens: 2400,
+    temperature: 0.8,
+    system: STORY_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
+    stream: true,
+  });
+  for await (const event of stream) {
+    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+      yield event.delta.text;
+    }
+  }
+}
+
 // ----- Memory: one-line summary of a finished story -----
 // Used by the memory loop to record "what happened tonight" so tomorrow's story
 // can call back to it (continuity) and avoid repeating it (anti-repetition).
