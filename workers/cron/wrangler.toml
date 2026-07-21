@@ -1,0 +1,12 @@
+name = "lullawood-trial-reminder"
+main = "index.js"
+compatibility_date = "2024-09-23"
+
+# Daily at 16:00 UTC. The Pages route only emails trialing subs whose trial_end
+# is within the next 48h and not yet reminded, and flips trial_reminder_sent, so
+# running once a day never double-sends. Adjust the hour to taste.
+[triggers]
+crons = ["0 16 * * *"]
+
+# Secret (do not commit) — must equal the Pages project's CRON_SECRET:
+#   cd workers/cron && npx wrangler secret put CRON_SECRET
