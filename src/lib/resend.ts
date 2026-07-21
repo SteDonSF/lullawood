@@ -27,13 +27,13 @@ export function storyEmailHtml(opts: { childName: string; title: string; body: s
 const FROM = "Lullawood <hello@lullawood.com>";
 const APP_URL = process.env.BETTER_AUTH_URL || "https://lullawood.com";
 
-export type EmailResult = { success: boolean; error?: string };
+export type EmailResult = { success: boolean; id?: string; error?: string };
 
 async function sendEmail(to: string, subject: string, text: string, html: string): Promise<EmailResult> {
   try {
-    const { error } = await getResend().emails.send({ from: FROM, to, subject, text, html });
+    const { data, error } = await getResend().emails.send({ from: FROM, to, subject, text, html });
     if (error) return { success: false, error: (error as { message?: string }).message ?? String(error) };
-    return { success: true };
+    return { success: true, id: data?.id };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
   }
