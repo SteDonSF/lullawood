@@ -2,6 +2,11 @@ name = "lullawood-trial-reminder"
 main = "index.js"
 compatibility_date = "2024-09-23"
 
+# Cron-only Worker — no public fetch surface. Disable the workers.dev route and
+# preview URLs so it's reachable only by its Cron Trigger.
+workers_dev = false
+preview_urls = false
+
 # Daily at 16:00 UTC. The Pages route only emails trialing subs whose trial_end
 # is within the next 48h and not yet reminded, and flips trial_reminder_sent, so
 # running once a day never double-sends. Adjust the hour to taste.
