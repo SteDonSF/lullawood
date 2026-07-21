@@ -3,6 +3,7 @@
 ## P0 — blocks launch / advertising / trust
 
 1. Honesty. Does any visible copy claim a feature that isn't shipped (audio narration, read in your voice, printed keepsake, waitlist)?
+   - **P2 exception — `public/art/how-pano.webp` "Delivered Every Evening" (on /how-it-works):** Text is atmospheric illustration signage, not a feature claim — low salience at page scale. Replace only if regenerating the asset for other reasons.
 2. Dead ends. Does any CTA, nav link, or button lead to a 404, redirect loop, or contradictory page?
 3. Pricing drift. Do /, /#pricing, and /pricing show identical numbers and tier names?
 4. The 7:58pm test. At 390x844: can a tired parent complete the primary action in a small number of taps, no spinner longer than 2s, no login wall where there shouldn't be one?
