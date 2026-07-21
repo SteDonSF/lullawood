@@ -19,8 +19,31 @@ import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 import { getStripe, planFromPriceId } from "@/lib/stripe";
 import { getDb, schema } from "@/lib/db";
+import { user } from "@/lib/auth-schema";
+import {
+  sendWelcomeEmail,
+  sendPaymentFailedEmail,
+  sendPaymentRecoveredEmail,
+} from "@/lib/resend";
 
 export const runtime = "edge";
+
+const DUNNING = new Set(["past_due", "unpaid"]);
+
+// Look up the parent's email + first name for a userId. Returns null if absent.
+async function lookupParent(
+  db: ReturnType<typeof getDb>,
+  userId: string
+): Promise<{ email: string; firstName: string } | null> {
+  const [u] = await db
+    .select({ email: user.email, name: user.name })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  if (!u?.email) return null;
+  const firstName = (u.name || "").trim().split(/\s+/)[0] || "there";
+  return { email: u.email, firstName };
+}
 
 function tsToDate(unix: number | null | undefined): Date | null {
   return unix ? new Date(unix * 1000) : null;
@@ -101,10 +124,46 @@ export async function POST(req: NextRequest) {
               typeof session.customer === "string" ? session.customer : session.customer?.id,
             ...fromSubscription(sub),
           });
+          // Welcome email — best-effort, never fails the webhook.
+          try {
+            const parent = await lookupParent(db, userId);
+            if (parent) await sendWelcomeEmail(parent.email, parent.firstName);
+          } catch { /* email is non-critical */ }
         }
         break;
       }
-      case "customer.subscription.updated":
+      case "customer.subscription.updated": {
+        const sub = event.data.object as Stripe.Subscription;
+        const userId = sub.metadata?.userId;
+        if (userId) {
+          // Capture the prior status BEFORE upsert to detect dunning transitions.
+          const [prior] = await db
+            .select({ status: schema.subscriptions.status })
+            .from(schema.subscriptions)
+            .where(eq(schema.subscriptions.userId, userId))
+            .limit(1);
+          const oldStatus = prior?.status ?? "";
+          const newStatus = sub.status;
+          await upsert(db, userId, {
+            stripeCustomerId:
+              typeof sub.customer === "string" ? sub.customer : sub.customer?.id,
+            ...fromSubscription(sub),
+          });
+          // Dunning emails — best-effort, on status transitions only.
+          const enteredDunning = DUNNING.has(newStatus) && !DUNNING.has(oldStatus);
+          const recovered = newStatus === "active" && DUNNING.has(oldStatus);
+          if (enteredDunning || recovered) {
+            try {
+              const parent = await lookupParent(db, userId);
+              if (parent) {
+                if (enteredDunning) await sendPaymentFailedEmail(parent.email, parent.firstName);
+                else await sendPaymentRecoveredEmail(parent.email, parent.firstName);
+              }
+            } catch { /* email is non-critical */ }
+          }
+        }
+        break;
+      }
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
         const userId = sub.metadata?.userId;

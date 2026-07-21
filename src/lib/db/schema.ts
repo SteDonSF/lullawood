@@ -78,6 +78,8 @@ export const subscriptions = pgTable("subscriptions", {
   currentPeriodEnd: timestamp("current_period_end"),
   trialEnd: timestamp("trial_end"),
   cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  // Guards the trial-ending reminder cron so each parent is emailed once.
+  trialReminderSent: boolean("trial_reminder_sent").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
