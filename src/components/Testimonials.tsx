@@ -30,7 +30,7 @@ export function Testimonials() {
             </figure>
           ))}
         </div>
-        <p className="mt-8 text-center text-[12.5px] text-ink-muted/70">Early-tester feedback from sample stories, shared with permission.</p>
+        <p className="mt-8 text-center text-[12.5px] text-ink-muted">Early-tester feedback from sample stories, shared with permission.</p>
       </div>
     </section>
   );

@@ -58,7 +58,7 @@ export default function LoginPage() {
         <p className="mt-5 text-center text-[14px] text-ink-muted">
           New here? <a href="/signup" className="font-bold text-gold hover:underline">Create an account</a>
         </p>
-        <p className="mt-4 text-center text-[12px] font-semibold text-ink-muted/70">
+        <p className="mt-4 text-center text-[12px] font-semibold text-ink-muted">
           Every story safety-reviewed · No ads, ever · Cancel anytime
         </p>
       </div>

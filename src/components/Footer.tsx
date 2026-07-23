@@ -29,7 +29,7 @@ export function Footer() {
           </ul>
         </div>
       </div>
-      <div className="mx-auto mt-10 max-w-6xl px-6 text-[12.5px] text-ink-muted/70">
+      <div className="mx-auto mt-10 max-w-6xl px-6 text-[12.5px] text-ink-muted">
         <p>Stories are AI-generated and safety-reviewed. Lullawood is designed for parents to share with their children. © {new Date().getFullYear()} Lullawood.</p>
       </div>
     </footer>

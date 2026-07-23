@@ -404,7 +404,7 @@ export function Demo() {
         {moreOpen && (<>
 
         {/* Free-text: describe your own adventure */}
-        <span className="mt-2.5 text-[13px] font-bold text-ink-muted">…or describe your own adventure <span className="font-semibold text-ink-muted/70">(optional)</span></span>
+        <span className="mt-2.5 text-[13px] font-bold text-ink-muted">…or describe your own adventure <span className="font-semibold text-ink-muted">(optional)</span></span>
         <textarea value={customRequest} maxLength={600} rows={2}
           placeholder="e.g. Arno and Leo win the cup final against Sleepy Hollow United"
           onChange={(e) => setCustomRequest(e.target.value)}
@@ -418,7 +418,7 @@ export function Demo() {
         <div className="flex flex-wrap gap-2">
           {LENGTHS.map((l) => (
             <Chip key={l.min} active={length === l.min} onClick={() => setLength(l.min)}>
-              {l.label} <span className="font-semibold text-ink-muted/70">{l.hint}</span>
+              {l.label} <span className="font-semibold text-ink-muted">{l.hint}</span>
             </Chip>
           ))}
         </div>
@@ -439,7 +439,7 @@ export function Demo() {
             <div className="flex items-center justify-between">
               <span className="text-[13px] font-bold text-ink-muted">And a brother or sister</span>
               <button type="button" onClick={() => { setCostarOpen(false); setCostarName(""); }}
-                className="text-[12px] font-bold text-ink-muted/70 hover:text-ink">Remove</button>
+                className="text-[12px] font-bold text-ink-muted hover:text-ink">Remove</button>
             </div>
             <div className="flex gap-3">
               <input value={costarName} maxLength={24} placeholder="e.g. Leo"
@@ -458,7 +458,7 @@ export function Demo() {
           {loading ? (name.trim() ? `Writing ${name.trim()}'s story…` : "Writing your story…") : story ? "Write another" : "Read tonight's story"}
         </button>
         <p className="mt-2.5 text-center text-[12.5px] text-ink-muted">Free to try. No account, no email.</p>
-        <p className="mt-1 text-center text-[12px] font-semibold text-ink-muted/70">
+        <p className="mt-1 text-center text-[12px] font-semibold text-ink-muted">
           Every story safety-reviewed · No ads, ever · Cancel anytime
         </p>
       </div>
