@@ -90,7 +90,7 @@ export default function HowItWorksPage() {
               See plans
             </Link>
           </div>
-          <p className="mt-1 text-[12.5px] font-semibold text-ink-muted/80">
+          <p className="mt-1 text-[12.5px] font-semibold text-ink-muted">
             Every story safety-reviewed · No ads, ever · Cancel anytime
           </p>
         </div>

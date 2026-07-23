@@ -59,7 +59,7 @@ function SignupForm() {
         <p className="mb-2 text-center text-[14px] text-ink-muted">
           {childName ? `Let's set up ${childName}'s Lullawood.` : "Start your family's Lullawood."}
         </p>
-        <p className="mb-6 text-center text-[12.5px] text-ink-muted/80">
+        <p className="mb-6 text-center text-[12.5px] text-ink-muted">
           7-night free trial · No charge today · Cancel anytime
         </p>
 
@@ -75,7 +75,7 @@ function SignupForm() {
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSignup()}
           className="mb-2 w-full rounded-2xl border border-border bg-white px-4 py-3 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
-        <p className="mb-5 text-[12px] text-ink-muted/80">At least 8 characters.</p>
+        <p className="mb-5 text-[12px] text-ink-muted">At least 8 characters.</p>
 
         {error && <p className="mb-4 text-[14px] font-semibold text-[#c2553d]">{error}</p>}
 

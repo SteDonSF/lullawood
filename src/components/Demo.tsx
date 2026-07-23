@@ -457,7 +457,7 @@ export function Demo() {
           className="mt-4 w-full rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-6 py-3 text-[15px] font-bold text-[#3a2d05] shadow-[0_10px_28px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70">
           {loading ? (name.trim() ? `Writing ${name.trim()}'s story…` : "Writing your story…") : story ? "Write another" : "Read tonight's story"}
         </button>
-        <p className="mt-2.5 text-center text-[12.5px] text-ink-muted/80">Free to try. No account, no email.</p>
+        <p className="mt-2.5 text-center text-[12.5px] text-ink-muted">Free to try. No account, no email.</p>
         <p className="mt-1 text-center text-[12px] font-semibold text-ink-muted/70">
           Every story safety-reviewed · No ads, ever · Cancel anytime
         </p>

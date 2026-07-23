@@ -15,7 +15,7 @@ const config: Config = {
         parchment: { DEFAULT: "#EFE6D1", deep: "#E4D7BC", soft: "#F5EDDB" },
         cream: { DEFAULT: "#F1D5A9", paper: "#FBF6EA" },
         // text
-        ink: { DEFAULT: "#2A3422", soft: "#433E2F", muted: "#6E6443" },
+        ink: { DEFAULT: "#2A3422", soft: "#433E2F", muted: "#5F562F" },
         // jewels
         gold: { DEFAULT: "#D28E28", deep: "#B7791A", text: "#9A6A18", amber: "#CE8C2C" },
         forest: { DEFAULT: "#2A3422", deep: "#16201A", bright: "#3E5B40" },

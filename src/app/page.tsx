@@ -25,7 +25,7 @@ export default function Home() {
             className="mt-8 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-8 py-4 text-[16px] font-bold text-[#3a2d05] shadow-[0_10px_28px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5">
             Try free →
           </Link>
-          <p className="mt-4 text-[12.5px] font-semibold text-ink-muted/80">
+          <p className="mt-4 text-[12.5px] font-semibold text-ink-muted">
             No account, no email · A free glimpse of what you'll create every night
           </p>
         </div>
@@ -78,7 +78,7 @@ export default function Home() {
             className="mt-8 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-8 py-4 text-[16px] font-bold text-[#3a2d05] shadow-[0_10px_28px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5">
             See plans →
           </Link>
-          <p className="mt-4 text-[12.5px] font-semibold text-ink-muted/80">
+          <p className="mt-4 text-[12.5px] font-semibold text-ink-muted">
             Safe by design · No ads, ever · Cancel anytime
           </p>
         </div>
