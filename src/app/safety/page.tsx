@@ -24,7 +24,7 @@ export default function Page() {
       </ul>
 
       <h2>You&apos;re in control</h2>
-      <p>You can review stories, change or delete a profile, and cancel at any time. Stories are delivered to <strong>you</strong> — the parent — to read aloud or play, so a screen never has to come between you and your child at bedtime.</p>
+      <p>You can review stories, change or delete a profile, and cancel at any time. Stories are delivered to <strong>you</strong> — the parent — to read aloud, so a screen never has to come between you and your child at bedtime.</p>
 
       <h2>Reporting a concern</h2>
       <p>If a story ever feels off, please tell us at <a href="mailto:safety@lullawood.com">safety@lullawood.com</a>. We read every report and respond quickly. Keeping Lullawood a safe, trusted place is the most important thing we do.</p>
