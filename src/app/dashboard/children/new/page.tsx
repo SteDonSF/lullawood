@@ -16,6 +16,7 @@ function NewChildForm() {
   const [aboutText, setAboutText] = useState("");
   const [avoid, setAvoid] = useState("");
 
+  const [moreOpen, setMoreOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   // Dreamer-at-limit state: message + whether an upgrade path exists (Family isn't top-capped).
@@ -53,6 +54,7 @@ function NewChildForm() {
     setError("");
     setAtLimit(null);
     if (!name.trim()) { setError("Please enter your child's name."); return; }
+    if (!age.trim()) { setError("Please enter your child's age."); return; }
 
     setSaving(true);
     const res = await fetch("/api/profile", {
@@ -114,34 +116,42 @@ function NewChildForm() {
             {seedName ? `Tell us about ${seedName}` : "Add a child"}
           </h1>
           <p className="mb-6 text-center text-[14px] text-ink-muted">
-            The more you share, the more tonight&apos;s story feels like it was written just for them.
+            Just a name and age to start — everything else is optional, and makes tonight&apos;s story feel even more like it was written for them.
           </p>
 
-          <label className={labelCls}>Their name</label>
+          <label className={labelCls}>Their name <span className="text-gold" aria-hidden>*</span></label>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls}
-            placeholder="e.g. Arno" />
+            placeholder="e.g. Arno" aria-required="true" />
 
-          <label className={labelCls}>Their age</label>
+          <label className={labelCls}>Their age <span className="text-gold" aria-hidden>*</span></label>
           <input value={age} onChange={(e) => setAge(e.target.value)} className={inputCls}
-            type="number" min={0} max={18} placeholder="e.g. 8" />
+            type="number" min={0} max={18} placeholder="e.g. 8" aria-required="true" />
 
-          <label className={labelCls}>Favourite animal or companion</label>
+          <label className={labelCls}>Favourite animal or companion <span className="font-normal text-ink-muted">(optional)</span></label>
           <input value={animal} onChange={(e) => setAnimal(e.target.value)} className={inputCls}
             placeholder="e.g. fox" />
 
-          <label className={labelCls}>Interests <span className="font-normal">(separate with commas)</span></label>
+          <label className={labelCls}>Interests <span className="font-normal text-ink-muted">(optional · separate with commas)</span></label>
           <input value={interests} onChange={(e) => setInterests(e.target.value)} className={inputCls}
             placeholder="e.g. soccer, space, dinosaurs" />
 
-          <label className={labelCls}>Tell us about them <span className="font-normal">(in your own words)</span></label>
+          {!moreOpen && (
+            <button type="button" onClick={() => setMoreOpen(true)}
+              className="mb-5 block text-left text-[13px] font-bold text-gold underline decoration-dotted underline-offset-4 hover:text-ink">
+              + More about {name.trim() || "your child"} <span className="font-normal text-ink-muted">(optional)</span>
+            </button>
+          )}
+          {moreOpen && (<>
+          <label className={labelCls}>Tell us about them <span className="font-normal text-ink-muted">(optional · in your own words)</span></label>
           <textarea value={aboutText} onChange={(e) => setAboutText(e.target.value)}
             rows={5} maxLength={1200}
             className="mb-5 w-full rounded-2xl border border-border bg-white px-4 py-3 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30"
             placeholder="Their personality, favourite colour, siblings and how they get along, comfort toys, inside jokes, where you live — anything that makes them who they are." />
 
-          <label className={labelCls}>Never include <span className="font-normal">(separate with commas)</span></label>
+          <label className={labelCls}>Never include <span className="font-normal text-ink-muted">(optional · separate with commas)</span></label>
           <input value={avoid} onChange={(e) => setAvoid(e.target.value)} className={inputCls}
             placeholder="e.g. spiders, thunderstorms" />
+          </>)}
 
           {atLimit && (
             <div className="mb-4 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5 text-center">
