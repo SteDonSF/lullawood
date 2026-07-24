@@ -8,9 +8,9 @@
 //   the server session (getSessionUser), never the browser.
 // TALKS TO: getSessionUser (session) · getDb/schema (children table)
 //
-// LULLAWOOD-FUTURE: add PATCH (edit child) and DELETE (remove child) here when
-//   the single-child view grows an "edit profile" affordance. Same ownership
-//   check applies. Deleting a child cascades to their stories (FK onDelete).
+// LULLAWOOD-FUTURE: add PATCH (edit child) here when the single-child view grows
+//   an "edit profile" affordance. Same ownership check as GET/DELETE applies.
+//   Deleting a child cascades to their stories (FK onDelete).
 // LULLAWOOD-FUTURE: when memory lands (Phase 3), this is a natural place to also
 //   return the child's recent story summaries for the single-child view.
 // =============================================================================
@@ -40,4 +40,27 @@ export async function GET(
   if (!child) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({ child });
+}
+
+// Remove one child — ONLY if it belongs to the logged-in parent. Same ownership
+// scoping as GET (child id AND session parentId), so a parent can never delete
+// another family's child by guessing a uuid. Stories cascade via the FK.
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getSessionUser(req.headers);
+  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+
+  const { id } = await params;
+
+  const db = getDb();
+  const [deleted] = await db
+    .delete(schema.children)
+    .where(and(eq(schema.children.id, id), eq(schema.children.parentId, user.id)))
+    .returning({ id: schema.children.id });
+
+  if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  return NextResponse.json({ ok: true, id: deleted.id });
 }

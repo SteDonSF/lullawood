@@ -6,7 +6,7 @@
 import type { Page } from "@playwright/test";
 import { assert, AssertionError, login, BASE_URL } from "./_shared";
 
-export const name = "7 · Add-child minimal (name + age only)";
+export const name = "6 · Add-child minimal (name + age only)";
 
 export async function run(page: Page) {
   const email = process.env.UX_AUDIT_TEST_EMAIL;
@@ -70,4 +70,24 @@ export async function run(page: Page) {
     consoleErrors.length === 0,
     `expected 0 console errors, saw ${consoleErrors.length}: ${consoleErrors.slice(0, 3).join(" | ")}`
   );
+
+  // 9. Self-cleanup (best-effort) — delete the child we just created so TestChild
+  //    doesn't accumulate on the shared reviewer account (Family = 4-child cap).
+  //    Runs AFTER every assertion above so a cleanup failure can never mask a real
+  //    form regression: on non-200 we warn, we never throw.
+  const m = new URL(page.url()).pathname.replace(/\/$/, "").match(/^\/dashboard\/children\/([^/]+)$/);
+  if (!m) {
+    console.warn(`  ⚠ cleanup skipped: no child id in URL (${new URL(page.url()).pathname}) — delete TestChild manually`);
+  } else {
+    const id = m[1];
+    // fetch() runs in the page, so the session cookie is sent automatically.
+    const status = await page
+      .evaluate(async (cid) => (await fetch(`/api/profile/${cid}`, { method: "DELETE" })).status, id)
+      .catch(() => 0);
+    if (status === 200) {
+      console.log(`  Cleaned up TestChild ${id}`);
+    } else {
+      console.warn(`  ⚠ cleanup failed: DELETE /api/profile/${id} returned ${status} — TestChild not removed`);
+    }
+  }
 }
