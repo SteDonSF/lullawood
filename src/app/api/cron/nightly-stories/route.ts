@@ -48,6 +48,13 @@ export async function GET(req: NextRequest) {
   const provided = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (provided !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  // Test hooks (still secret-gated): ?force=1 bypasses the once-per-day
+  // idempotency so a story is regenerated + re-emailed; ?childId=<id> limits the
+  // run to a single child (so a test send doesn't email every subscriber).
+  const url = new URL(req.url);
+  const force = ["1", "true"].includes((url.searchParams.get("force") || "").toLowerCase());
+  const onlyChildId = url.searchParams.get("childId");
+
   const db = getDb();
   const dashboardUrl = `${APP_URL.replace(/\/+$/, "")}/dashboard`;
   const todayStart = startOfTodayUTC();
@@ -90,15 +97,18 @@ export async function GET(req: NextRequest) {
     }
 
     for (const child of kids) {
+      // ?childId= limits a test run to a single child (no collateral emails).
+      if (onlyChildId && child.id !== onlyChildId) continue;
       total += 1;
       try {
-        // Idempotency: skip if a nightly story already exists for today.
+        // Idempotency: skip if a nightly story already exists for today —
+        // unless ?force=1, which regenerates + re-emails (for testing).
         const [existing] = await db
           .select({ id: schema.stories.id })
           .from(schema.stories)
           .where(and(eq(schema.stories.childId, child.id), eq(schema.stories.isNightly, true), gte(schema.stories.createdAt, todayStart)))
           .limit(1);
-        if (existing) {
+        if (existing && !force) {
           skipped += 1;
           results.push({ userId: sub.userId, childId: child.id, success: true, skipped: true });
           continue;
