@@ -156,15 +156,25 @@ export function sendNightlyStoryEmail(
 
   const html = `<!doctype html><html><body style="margin:0;background:#F2EAD8;padding:32px 16px;font-family:Georgia,'Times New Roman',serif">
   <div style="max-width:560px;margin:0 auto;background:#FBF6EA;border:1px solid #EADBBE;border-radius:18px;padding:32px 30px">
-    <div style="text-align:center;margin:0 0 14px"><img src="https://lullawood.com/logo.png" width="48" height="48" alt="Lullawood" style="display:inline-block;width:48px;height:48px;border:0" /></div>
+    <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 14px">
+      <tr>
+        <!-- LEFT: two subtle gold stars, diagonal upper-left of the logo -->
+        <td width="60" align="right" valign="middle" style="padding-right:12px;line-height:1;color:#C49A2A;font-family:Georgia,'Times New Roman',serif;white-space:nowrap;">
+          <span style="font-size:10px;vertical-align:super;">&#10022;</span>&nbsp;<span style="font-size:6px;vertical-align:baseline;">&#8226;</span>
+        </td>
+        <!-- CENTER: the pine tree logo -->
+        <td align="center" valign="middle">
+          <img src="https://lullawood.com/logo.png" width="48" height="48" alt="Lullawood" style="display:block;width:48px;height:48px;border:0" />
+        </td>
+        <!-- RIGHT: mirror of left -->
+        <td width="60" align="left" valign="middle" style="padding-left:12px;line-height:1;color:#C49A2A;font-family:Georgia,'Times New Roman',serif;white-space:nowrap;">
+          <span style="font-size:6px;vertical-align:baseline;">&#8226;</span>&nbsp;<span style="font-size:10px;vertical-align:super;">&#10022;</span>
+        </td>
+      </tr>
+    </table>
     <p style="margin:0 0 4px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;font-size:12px;font-weight:bold;color:#D28E28">Lullawood</p>
     <p style="margin:0 0 22px;font-family:Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;font-size:11px;color:#8a7d63">A new story every night</p>
     <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:13px;color:#8a7d63">${esc(childName)}&rsquo;s story for tonight</p>
-    <!-- Decorative moon + stars divider. Unicode glyphs (not SVG/images) so it
-         renders in every client, Gmail included, where inline SVG is stripped. -->
-    <div style="text-align:center;margin:16px 0;line-height:1;color:#C49A2A;font-family:Georgia,'Times New Roman',serif;">
-      <span style="font-size:12px;vertical-align:super;">&#10022;</span>&nbsp;<span style="font-size:9px;vertical-align:top;">&#10023;</span>&nbsp;<span style="font-size:26px;vertical-align:middle;">&#9790;</span>&nbsp;<span style="font-size:11px;vertical-align:super;">&#10022;</span>
-    </div>
     <h1 style="margin:0 0 20px;font-size:24px;line-height:1.3;color:#2A3422">${esc(storyTitle)}</h1>
     ${paras}
     <a href="${dashboardUrl}" style="display:inline-block;margin:10px 0 4px;background:#D28E28;color:#3a2d05;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;font-size:15px;padding:13px 26px;border-radius:999px">Read it together tonight &rarr;</a>
