@@ -160,6 +160,11 @@ export function sendNightlyStoryEmail(
     <p style="margin:0 0 4px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;font-size:12px;font-weight:bold;color:#D28E28">Lullawood</p>
     <p style="margin:0 0 22px;font-family:Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;font-size:11px;color:#8a7d63">A new story every night</p>
     <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:13px;color:#8a7d63">${esc(childName)}&rsquo;s story for tonight</p>
+    <!-- Decorative moon + stars divider. Unicode glyphs (not SVG/images) so it
+         renders in every client, Gmail included, where inline SVG is stripped. -->
+    <div style="text-align:center;margin:16px 0;line-height:1;color:#C49A2A;font-family:Georgia,'Times New Roman',serif;">
+      <span style="font-size:12px;vertical-align:super;">&#10022;</span>&nbsp;<span style="font-size:9px;vertical-align:top;">&#10023;</span>&nbsp;<span style="font-size:26px;vertical-align:middle;">&#9790;</span>&nbsp;<span style="font-size:11px;vertical-align:super;">&#10022;</span>
+    </div>
     <h1 style="margin:0 0 20px;font-size:24px;line-height:1.3;color:#2A3422">${esc(storyTitle)}</h1>
     ${paras}
     <a href="${dashboardUrl}" style="display:inline-block;margin:10px 0 4px;background:#D28E28;color:#3a2d05;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;font-size:15px;padding:13px 26px;border-radius:999px">Read it together tonight &rarr;</a>
