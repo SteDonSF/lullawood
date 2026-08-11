@@ -156,12 +156,14 @@ export function sendNightlyStoryEmail(
 
   const html = `<!doctype html><html><body style="margin:0;background:#F2EAD8;padding:32px 16px;font-family:Georgia,'Times New Roman',serif">
   <div style="max-width:560px;margin:0 auto;background:#FBF6EA;border:1px solid #EADBBE;border-radius:18px;padding:32px 30px">
+    <div style="text-align:center;margin:0 0 14px"><img src="https://lullawood.com/logo.png" width="48" height="48" alt="Lullawood" style="display:inline-block;width:48px;height:48px;border:0" /></div>
     <p style="margin:0 0 4px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;font-size:12px;font-weight:bold;color:#D28E28">Lullawood</p>
     <p style="margin:0 0 22px;font-family:Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;font-size:11px;color:#8a7d63">A new story every night</p>
     <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:13px;color:#8a7d63">${esc(childName)}&rsquo;s story for tonight</p>
     <h1 style="margin:0 0 20px;font-size:24px;line-height:1.3;color:#2A3422">${esc(storyTitle)}</h1>
     ${paras}
-    <a href="${dashboardUrl}" style="display:inline-block;margin:10px 0 4px;background:#D28E28;color:#3a2d05;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;font-size:15px;padding:13px 26px;border-radius:999px">Read in Lullawood &rarr;</a>
+    <a href="${dashboardUrl}" style="display:inline-block;margin:10px 0 4px;background:#D28E28;color:#3a2d05;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;font-size:15px;padding:13px 26px;border-radius:999px">Read it together tonight &rarr;</a>
+    <p style="margin:12px 0 0;font-size:13px;color:#8a7d63;text-align:center;font-family:Arial,sans-serif">Tomorrow&rsquo;s story is already being written for ${esc(childName)}.</p>
     <p style="margin:26px 0 0;font-size:12px;line-height:1.6;color:#8a7d63;font-family:Arial,sans-serif">You&rsquo;re receiving this because you have a Lullawood subscription. Manage your account at <a href="${dashboardUrl}" style="color:#9A6A18">lullawood.com/dashboard</a>.</p>
   </div>
 </body></html>`;
@@ -170,7 +172,8 @@ export function sendNightlyStoryEmail(
     `A new story every night — Lullawood\n\n` +
     `Hi ${firstName},\n\n${childName}'s story for tonight is ready:\n\n` +
     `${storyTitle}\n\n${storyBody.trim()}\n\n` +
-    `Read it in Lullawood: ${dashboardUrl}\n\n` +
+    `Read it together tonight: ${dashboardUrl}\n\n` +
+    `Tomorrow's story is already being written for ${childName}.\n\n` +
     `You're receiving this because you have a Lullawood subscription. Manage your account at lullawood.com/dashboard`;
 
   return sendEmail(to, subject, text, html);
