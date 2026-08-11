@@ -7,6 +7,7 @@ type Child = {
   id: string;
   name: string;
   age: number | null;
+  storyCount?: number;
 };
 
 type Sub = {
@@ -187,23 +188,36 @@ export default function DashboardPage() {
             )}
             <ul className="space-y-3">
               {children.map((c) => (
-                <li key={c.id}>
-                  
+                <li key={c.id} className="overflow-hidden rounded-2xl border border-border bg-white shadow-lift transition hover:border-gold/50">
                   <a
                     href={`/dashboard/children/${c.id}`}
-                    className="group flex items-center justify-between rounded-2xl border border-border bg-white px-5 py-4 shadow-lift transition hover:-translate-y-0.5 hover:border-gold/50"
+                    className="group flex items-center justify-between px-5 py-4"
                   >
-                    <span className="flex items-center gap-3">
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="text-[16px] font-semibold text-ink">{c.name}</span>
                       <span className="text-[13px] text-ink-muted">
                         {c.age != null ? `age ${c.age}` : "age not set"}
                       </span>
+                      {c.storyCount != null && c.storyCount > 0 && (
+                        <span className="rounded-full bg-cream-paper px-2.5 py-0.5 text-[12px] font-bold text-gold-text">
+                          {c.storyCount} {c.storyCount === 1 ? "adventure" : "adventures"}
+                        </span>
+                      )}
                     </span>
-                    <span className="flex items-center gap-1.5 text-[13px] font-bold text-gold-text transition group-hover:gap-2.5">
+                    <span className="flex shrink-0 items-center gap-1.5 text-[13px] font-bold text-gold-text transition group-hover:gap-2.5">
                       Tonight&apos;s story
                       <span aria-hidden>&rarr;</span>
                     </span>
                   </a>
+                  {c.storyCount != null && c.storyCount > 0 && (
+                    <a
+                      href={`/dashboard/children/${c.id}/stories`}
+                      className="flex items-center gap-1.5 border-t border-border/60 bg-cream-paper/40 px-5 py-2.5 text-[13px] font-semibold text-ink-muted transition hover:text-gold-text"
+                    >
+                      View all stories
+                      <span aria-hidden>&rarr;</span>
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>

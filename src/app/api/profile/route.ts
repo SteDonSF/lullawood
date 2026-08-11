@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, schema } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { getAccess } from "@/lib/subscription";
 
 export const runtime = "edge";
 
-// List the logged-in parent's children.
+// List the logged-in parent's children, each with its story count (for the
+// dashboard's "N adventures" library badge).
 export async function GET(req: NextRequest) {
   const user = await getSessionUser(req.headers);
   if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
@@ -18,7 +19,22 @@ export async function GET(req: NextRequest) {
     .where(eq(schema.children.parentId, user.id))
     .orderBy(desc(schema.children.createdAt));
 
-  return NextResponse.json({ children: kids });
+  // Story count per child (one grouped query, scoped to this parent's children).
+  let countMap = new Map<string, number>();
+  try {
+    const counts = await db
+      .select({ childId: schema.stories.childId, n: sql<number>`count(*)::int` })
+      .from(schema.stories)
+      .innerJoin(schema.children, eq(schema.stories.childId, schema.children.id))
+      .where(eq(schema.children.parentId, user.id))
+      .groupBy(schema.stories.childId);
+    countMap = new Map(counts.map((c) => [c.childId, c.n]));
+  } catch {
+    /* count is a nice-to-have — a read hiccup just yields 0, never blocks the list */
+  }
+
+  const children = kids.map((k) => ({ ...k, storyCount: countMap.get(k.id) ?? 0 }));
+  return NextResponse.json({ children });
 }
 
 // Create a child for the logged-in parent.

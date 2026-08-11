@@ -27,6 +27,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { Mark } from "@/components/Mark";
+import { relativeNight } from "@/lib/relative-date";
 
 type Child = {
   id: string;
@@ -37,6 +38,21 @@ type Child = {
   aboutText: string | null;
   avoidList: string[] | null;
 };
+
+type HistoryStory = {
+  id: string;
+  title: string;
+  summary: string | null;
+  body: string;
+  createdAt: string;
+  isNightly: boolean;
+};
+
+function historyTitle(s: HistoryStory): string {
+  if (s.title && s.title.trim()) return s.title.trim();
+  const first = s.body.split("\n").map((l) => l.trim()).find(Boolean);
+  return first || "A Lullawood story";
+}
 
 export default function ChildViewPage() {
   const params = useParams();
@@ -58,6 +74,10 @@ export default function ChildViewPage() {
   // tonight's ready-and-waiting nightly story (delivered by the cron)
   const [waitingStory, setWaitingStory] = useState<{ title: string; body: string } | null>(null);
 
+  // recent story history (last 3) + total, for the "Story history" section
+  const [history, setHistory] = useState<HistoryStory[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+
   useEffect(() => {
     if (!session || !id) return;
     fetch(`/api/profile/${id}`)
@@ -71,6 +91,18 @@ export default function ChildViewPage() {
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
+  }, [session, id]);
+
+  useEffect(() => {
+    if (!session || !id) return;
+    fetch(`/api/stories/${id}?limit=3`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setHistory(d.stories ?? []);
+        setHistoryTotal(d.total ?? 0);
+      })
+      .catch(() => { /* history is non-critical — silently skip on error */ });
   }, [session, id]);
 
   // Open the already-generated nightly story in the reader — no generation. The
@@ -288,6 +320,46 @@ export default function ChildViewPage() {
             </article>
           )}
         </section>
+
+        {/* Story history — the accumulating world, glimpsed. Full library is one tap away. */}
+        {history.length > 0 && (
+          <section className="mt-6 rounded-3xl warm-card p-8">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="h-display text-xl font-semibold text-ink">Story history</h2>
+              {historyTotal > history.length && (
+                <a href={`/dashboard/children/${id}/stories`} className="shrink-0 text-[13px] font-bold text-gold-text hover:underline">
+                  See all {historyTotal} stories &rarr;
+                </a>
+              )}
+            </div>
+            <ul className="space-y-3">
+              {history.map((s) => (
+                <li key={s.id}>
+                  <a
+                    href={`/dashboard/children/${id}/stories/${s.id}`}
+                    className="group flex items-center justify-between gap-3 rounded-2xl border border-border bg-white px-4 py-3 shadow-lift transition hover:-translate-y-0.5 hover:border-gold/50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-[15px] font-semibold text-ink">{historyTitle(s)}</span>
+                      <span className="text-[12px] text-ink-muted">
+                        {relativeNight(s.createdAt)}{s.isNightly ? " · Nightly" : ""}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5 text-[13px] font-bold text-gold-text transition group-hover:gap-2.5">
+                      Read again
+                      <span aria-hidden>&rarr;</span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+            {historyTotal > history.length && (
+              <a href={`/dashboard/children/${id}/stories`} className="mt-4 inline-block text-[13px] font-bold text-gold-text hover:underline">
+                See all {historyTotal} stories &rarr;
+              </a>
+            )}
+          </section>
+        )}
       </div>
     </main>
   );
