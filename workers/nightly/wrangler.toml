@@ -1,0 +1,17 @@
+name = "lullawood-nightly"
+main = "index.js"
+compatibility_date = "2026-08-04"
+
+# Cron-only Worker — no public fetch surface. Disable the workers.dev route and
+# preview URLs so it's reachable only by its Cron Trigger.
+workers_dev = false
+preview_urls = false
+
+# 18:00 UTC daily — early/late evening across US & UK, so tonight's story is
+# already generated and waiting well before bedtime. The Pages route is
+# idempotent (one nightly story per child per day), so a re-run never doubles up.
+[triggers]
+crons = ["0 18 * * *"]
+
+# Secret (do not commit) — must equal the Pages project's CRON_SECRET:
+#   cd workers/nightly && npx wrangler secret put CRON_SECRET

@@ -55,6 +55,9 @@ export default function ChildViewPage() {
   const [genError, setGenError] = useState("");
   const [tonight, setTonight] = useState("");
 
+  // tonight's ready-and-waiting nightly story (delivered by the cron)
+  const [waitingStory, setWaitingStory] = useState<{ title: string; body: string } | null>(null);
+
   useEffect(() => {
     if (!session || !id) return;
     fetch(`/api/profile/${id}`)
@@ -62,10 +65,21 @@ export default function ChildViewPage() {
         if (r.status === 404) { setNotFound(true); return null; }
         return r.json();
       })
-      .then((d) => { if (d?.child) setChild(d.child); })
+      .then((d) => {
+        if (d?.child) setChild(d.child);
+        if (d?.todaysStory) setWaitingStory({ title: d.todaysStory.title, body: d.todaysStory.body });
+      })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [session, id]);
+
+  // Open the already-generated nightly story in the reader — no generation. The
+  // reader derives title/body from `story` (first line = title), so join them.
+  function readWaitingStory() {
+    if (!waitingStory) return;
+    setGenError("");
+    setStory(`${waitingStory.title}\n\n${waitingStory.body}`);
+  }
 
   async function writeStory() {
     setGenError("");
@@ -204,7 +218,7 @@ export default function ChildViewPage() {
             <h2 className="h-display text-xl font-semibold text-cream-paper">Tonight&apos;s story</h2>
             <button onClick={writeStory} disabled={generating}
               className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-70">
-              {generating ? "Writing…" : story ? "Write another" : "Write tonight's story"}
+              {generating ? "Writing…" : story ? "Write another" : waitingStory ? "Write a different one" : "Write tonight's story"}
             </button>
           </div>
 
@@ -223,9 +237,29 @@ export default function ChildViewPage() {
 
           {genError && <p className="mb-3 text-[14px] font-semibold text-[#f0b8a8]">{genError}</p>}
 
-          {!story && !generating && (
+          {/* Waiting nightly story — ready and waiting, no generation needed */}
+          {waitingStory && !story && !generating && (
+            <div className="rounded-2xl border border-gold/30 bg-[#1b2e28] p-5">
+              <div className="mb-2.5 flex items-center gap-2">
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-gold shadow-[0_0_0_4px_rgba(226,161,44,.18)]" />
+                <span className="text-[14px] font-bold text-gold">Tonight&apos;s story is ready</span>
+              </div>
+              <p className="mb-4 text-[14px] leading-relaxed text-cream-paper/70">
+                A fresh adventure for {child.name} is waiting for tonight.
+              </p>
+              <button onClick={readWaitingStory}
+                className="rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5">
+                Read tonight&apos;s story &rarr;
+              </button>
+            </div>
+          )}
+
+          {/* No story waiting yet — being prepared, with on-demand fallback */}
+          {!waitingStory && !story && !generating && (
             <p className="text-[14px] leading-relaxed text-cream-paper/70">
               A fresh story for {child.name}, written for who they are tonight. It&apos;ll appear here.
+              <br />
+              <span className="text-cream-paper/50">Your story is being prepared — or generate one now.</span>
             </p>
           )}
 

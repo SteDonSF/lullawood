@@ -38,6 +38,10 @@ export const stories = pgTable("stories", {
   body: text("body").notNull(),
   summary: text("summary"),          // one-line, fed into tomorrow's prompt
   audioUrl: text("audio_url"),
+  // True when produced by the nightly delivery cron (vs. an on-demand "write a
+  // story now" from the dashboard). The dashboard's "tonight's story is ready"
+  // state keys off this + createdAt (the generation time). Backfills false.
+  isNightly: boolean("is_nightly").default(false).notNull(),
   deliveredAt: timestamp("delivered_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
