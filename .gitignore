@@ -7,6 +7,13 @@
 /.vercel
 /.open-next
 
+# wrangler local state / cache
+.wrangler/
+
+# playwright test output
+test-results/
+playwright-report/
+
 # environment / secrets
 .env
 .env*.local
