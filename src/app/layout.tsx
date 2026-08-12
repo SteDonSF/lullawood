@@ -1,23 +1,26 @@
 import type { Metadata } from "next";
-import { Cinzel, Playfair_Display, Nunito } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const title = Cinzel({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+// Self-hosted (latin-subset, variable) so the build never fetches from Google at
+// build time. Files live in ./fonts. Weight ranges cover the weights we use.
+const title = localFont({
+  src: "./fonts/cinzel.woff2",
+  weight: "500 700",
   variable: "--font-title",
   display: "swap",
 });
-const display = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  style: ["normal", "italic"],
+const display = localFont({
+  src: [
+    { path: "./fonts/playfair.woff2", weight: "500 700", style: "normal" },
+    { path: "./fonts/playfair-italic.woff2", weight: "500 700", style: "italic" },
+  ],
   variable: "--font-display",
   display: "swap",
 });
-const body = Nunito({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+const body = localFont({
+  src: "./fonts/nunito.woff2",
+  weight: "400 800",
   variable: "--font-body",
   display: "swap",
 });
