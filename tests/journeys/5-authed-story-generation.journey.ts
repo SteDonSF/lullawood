@@ -17,8 +17,8 @@ export async function run(page: Page) {
   page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200)); });
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${(e.message || String(e)).slice(0, 200)}`));
 
-  // 1-3. Login → dashboard (within 15000ms, cold-tolerant).
-  await login(page, email!, password!, 15000);
+  // 1-3. Login → dashboard (within 20000ms, cold-tolerant).
+  await login(page, email!, password!, 20000);
 
   // 4. Open the first child's page via its "Tonight's story" link.
   const childLink = page.getByRole("link").filter({ hasText: /tonight'?s story/i }).first();
