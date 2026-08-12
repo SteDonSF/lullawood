@@ -27,25 +27,42 @@ export async function bodyText(page: Page): Promise<string> {
   return (await page.locator("body").innerText()) || "";
 }
 
-/** Fill /login and submit; assert we reach /dashboard within `timeout` ms. */
+/**
+ * Fill /login and submit; assert we reach /dashboard within `timeout` ms.
+ * ONE-SHOT RETRY: cold-start flakes (a cold Cloudflare isolate / Neon HTTP
+ * connection warming up) usually clear on a second try. If the first full
+ * attempt doesn't reach /dashboard, wait 2000ms and re-run the entire flow
+ * (fresh navigation + refill + resubmit) once more before failing the journey.
+ */
 export async function login(page: Page, email: string, password: string, timeout = 15000) {
-  await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
-  // Wait for React to hydrate before filling — otherwise the controlled inputs get
-  // reset to "" on hydration and an empty form is submitted. (networkidle is a good
-  // hydration proxy for this simple page.)
-  await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
-  const emailInput = page.locator('input[type="email"]');
-  const pwInput = page.locator('input[type="password"]');
-  await emailInput.fill(email);
-  await pwInput.fill(password);
-  // Guard against a late hydration wiping the fields.
-  if ((await emailInput.inputValue()) !== email) await emailInput.fill(email);
-  if ((await pwInput.inputValue()) !== password) await pwInput.fill(password);
-  await page.getByRole("button", { name: /log in/i }).click();
+  const attempt = async () => {
+    await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
+    // Wait for React to hydrate before filling — otherwise the controlled inputs get
+    // reset to "" on hydration and an empty form is submitted. (networkidle is a good
+    // hydration proxy for this simple page.)
+    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+    const emailInput = page.locator('input[type="email"]');
+    const pwInput = page.locator('input[type="password"]');
+    await emailInput.fill(email);
+    await pwInput.fill(password);
+    // Guard against a late hydration wiping the fields.
+    if ((await emailInput.inputValue()) !== email) await emailInput.fill(email);
+    if ((await pwInput.inputValue()) !== password) await pwInput.fill(password);
+    await page.getByRole("button", { name: /log in/i }).click();
+    await page.waitForURL(/\/dashboard/, { timeout }); // throws on timeout
+  };
+
   try {
-    await page.waitForURL(/\/dashboard/, { timeout });
+    await attempt();
   } catch {
-    throw new AssertionError(`login did not reach /dashboard within ${timeout}ms (check credentials in .env.local)`);
+    await page.waitForTimeout(2000);
+    try {
+      await attempt();
+    } catch {
+      throw new AssertionError(
+        `login did not reach /dashboard within ${timeout}ms after one retry (check credentials in .env.local)`,
+      );
+    }
   }
 }
 
