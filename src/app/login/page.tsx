@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { signIn } from "@/lib/auth-client";
 import { Mark } from "@/components/Mark";
+import { PasswordInput } from "@/components/PasswordInput";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -40,9 +41,9 @@ export default function LoginPage() {
           className="mb-4 w-full rounded-2xl border border-border bg-white px-4 py-3 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
 
         <label className="mb-1 block text-[13px] font-bold text-ink-muted">Password</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-          className="mb-5 w-full rounded-2xl border border-border bg-white px-4 py-3 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+          autoComplete="current-password" className="mb-5" />
 
         <div className="mb-5 -mt-2 text-right">
           <a href="/forgot-password" className="text-[13px] font-semibold text-gold hover:underline">Forgot password?</a>

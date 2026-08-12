@@ -2,6 +2,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { resetPassword } from "@/lib/auth-client";
+import { PasswordInput } from "@/components/PasswordInput";
 
 function ResetForm() {
   const params = useSearchParams();
@@ -46,13 +47,13 @@ function ResetForm() {
       <p className="mb-6 text-[14px] text-ink-muted">Pick something at least 8 characters long.</p>
 
       <label className="mb-1 block text-[13px] font-bold text-ink-muted">New password</label>
-      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-        className="mb-4 w-full rounded-2xl border border-border bg-white px-4 py-3 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+      <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)}
+        autoComplete="new-password" className="mb-4" />
 
       <label className="mb-1 block text-[13px] font-bold text-ink-muted">Confirm new password</label>
-      <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+      <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleReset()}
-        className="mb-5 w-full rounded-2xl border border-border bg-white px-4 py-3 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+        autoComplete="new-password" className="mb-5" />
 
       {error && <p className="mb-4 text-[14px] font-semibold text-[#c2553d]">{error}</p>}
 

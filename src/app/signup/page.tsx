@@ -3,6 +3,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signUp } from "@/lib/auth-client";
 import { Mark } from "@/components/Mark";
+import { PasswordInput } from "@/components/PasswordInput";
 
 function SignupForm() {
   const params = useSearchParams();
@@ -72,9 +73,9 @@ function SignupForm() {
           className="mb-4 w-full rounded-2xl border border-border bg-white px-4 py-3 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
 
         <label className="mb-1 block text-[13px] font-bold text-ink-muted">Password</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSignup()}
-          className="mb-2 w-full rounded-2xl border border-border bg-white px-4 py-3 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
+          autoComplete="new-password" className="mb-2" />
         <p className="mb-5 text-[12px] text-ink-muted">At least 8 characters.</p>
 
         {error && <p className="mb-4 text-[14px] font-semibold text-[#c2553d]">{error}</p>}
