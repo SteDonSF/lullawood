@@ -29,6 +29,9 @@ async function main() {
   const results: Result[] = [];
 
   for (const file of files) {
+    // Space journeys out so we don't fire /sign-in from one IP in rapid
+    // succession (auth rate-limiting). 3s pause before each journey after the first.
+    if (results.length > 0) await new Promise((r) => setTimeout(r, 3000));
     const mod = await import(pathToFileURL(resolve(DIR, file)).href);
     const name: string = mod.name || file;
     const ctx = await browser.newContext();
