@@ -80,6 +80,7 @@ function SignupForm() {
 
         {error && <p className="mb-4 text-[14px] font-semibold text-[#c2553d]">{error}</p>}
 
+        <p className="mb-3 text-center text-[12.5px] text-ink-muted">Safe by design · No ads · Cancel anytime</p>
         <button onClick={handleSignup} disabled={loading}
           className="w-full rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-6 py-3 text-[15px] font-bold text-[#3a2d05] shadow-[0_10px_28px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-70">
           {loading ? "Creating your account…" : "Create account"}

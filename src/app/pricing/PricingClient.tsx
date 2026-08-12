@@ -100,6 +100,10 @@ export default function PricingClient() {
           <p className="mb-6 text-center text-[14px] font-semibold text-[#c2553d]">{error}</p>
         )}
 
+        {/* Mobile: surface a safety line above the fold — the ✓ trust strip sits
+            below the cards, off-screen on phones (audit P1-2). */}
+        <p className="mb-4 text-center text-[12.5px] text-ink-muted md:hidden">Safe by design · No ads · Cancel anytime</p>
+
         <div className="grid items-stretch gap-5 sm:grid-cols-2">
           {TIERS.map((p) => (
             <div

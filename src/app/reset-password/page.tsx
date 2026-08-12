@@ -55,7 +55,16 @@ function ResetForm() {
         onKeyDown={(e) => e.key === "Enter" && handleReset()}
         autoComplete="new-password" className="mb-5" />
 
-      {error && <p className="mb-4 text-[14px] font-semibold text-[#c2553d]">{error}</p>}
+      {error && (
+        <div className="mb-4">
+          <p className="text-[14px] font-semibold text-[#c2553d]">{error}</p>
+          {/expired|invalid/i.test(error) && (
+            <a href="/forgot-password" className="mt-1.5 inline-block text-[13px] font-bold text-gold hover:underline">
+              Request a new reset link &rarr;
+            </a>
+          )}
+        </div>
+      )}
 
       <button onClick={handleReset} disabled={loading}
         className="w-full rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-6 py-3 text-[15px] font-bold text-[#3a2d05] shadow-[0_10px_28px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-70">
@@ -69,6 +78,9 @@ export default function ResetPasswordPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-cream-paper px-4">
       <div className="w-full max-w-md rounded-3xl border border-border bg-white p-8 shadow-lift">
+        <a href="/login" className="mb-6 inline-block text-[13px] font-semibold text-gold hover:underline">
+          &larr; Back to log in
+        </a>
         <Suspense fallback={<p className="text-[14px] text-ink-muted">Loading…</p>}>
           <ResetForm />
         </Suspense>

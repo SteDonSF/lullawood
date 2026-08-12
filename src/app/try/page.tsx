@@ -35,6 +35,8 @@ export default function TryPage() {
       <section className="pt-10">
         <div className="mx-auto max-w-6xl px-6">
           <SectionHead heading={DEMO.heading} sub={DEMO.sub} />
+          {/* Mobile: safety line above the demo/CTA — trust strip is below the fold (audit P1-2). */}
+          <p className="mt-4 text-center text-[12.5px] text-ink-muted md:hidden">Safe by design · No ads · Cancel anytime</p>
           <div className="mt-10"><Demo /></div>
         </div>
       </section>
