@@ -44,6 +44,8 @@ export async function GET(
     .where(eq(schema.stories.childId, childId));
 
   // Left-join the co-star child (if any) to surface its name for the badge.
+  // co_star_child_id is `text` but children.id is `uuid`, so cast the uuid to
+  // text — Postgres rejects a bare `text = uuid` comparison (was 500-ing here).
   const coChild = alias(schema.children, "co_child");
   const stories = await db
     .select({
@@ -57,7 +59,7 @@ export async function GET(
       coStarName: coChild.name,
     })
     .from(schema.stories)
-    .leftJoin(coChild, eq(schema.stories.coStarChildId, coChild.id))
+    .leftJoin(coChild, sql`${schema.stories.coStarChildId} = ${coChild.id}::text`)
     .where(eq(schema.stories.childId, childId))
     .orderBy(desc(schema.stories.createdAt))
     .limit(limit)

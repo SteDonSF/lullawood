@@ -8,9 +8,9 @@
 // The homepage keeps a short teaser that links here (href="/try").
 // =============================================================================
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Demo } from "@/components/Demo";
-import { Mark } from "@/components/Mark";
+import { Nav } from "@/components/Nav";
+import { Footer } from "@/components/Footer";
 import { SectionHead } from "@/components/Section";
 import { DEMO } from "@/lib/content";
 
@@ -30,19 +30,7 @@ export const metadata: Metadata = {
 export default function TryPage() {
   return (
     <main className="min-h-screen bg-cream-paper pb-[74px]">
-      <header className="relative z-20 pt-6">
-        <div className="mx-auto flex max-w-6xl items-center gap-6 px-6">
-          <Link href="/" className="flex items-center gap-2.5 text-ink">
-            <Mark size={30} pine="#2A3422" ring="#D28E28" accent="#D28E28" />
-            <span className="wordmark text-[22px] font-semibold">Lullawood</span>
-          </Link>
-          <nav className="ml-auto hidden gap-7 text-[15px] font-semibold text-ink-muted hover:text-ink md:flex">
-            <Link href="/how-it-works" className="hover:text-ink">How it works</Link>
-            <Link href="/pricing" className="hover:text-ink">Pricing</Link>
-            <Link href="/login" className="hover:text-ink">Log in</Link>
-          </nav>
-        </div>
-      </header>
+      <Nav />
 
       <section className="pt-10">
         <div className="mx-auto max-w-6xl px-6">
@@ -50,6 +38,8 @@ export default function TryPage() {
           <div className="mt-10"><Demo /></div>
         </div>
       </section>
+
+      <Footer />
     </main>
   );
 }

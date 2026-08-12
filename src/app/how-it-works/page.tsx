@@ -8,7 +8,8 @@
 // =============================================================================
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Mark } from "@/components/Mark";
+import { Nav } from "@/components/Nav";
+import { Footer } from "@/components/Footer";
 import { STEPS } from "@/lib/content";
 
 export const metadata: Metadata = {
@@ -27,19 +28,7 @@ export const metadata: Metadata = {
 export default function HowItWorksPage() {
   return (
     <main className="min-h-screen bg-cream-paper">
-      <header className="relative z-20 pt-6">
-        <div className="mx-auto flex max-w-6xl items-center gap-6 px-6">
-          <Link href="/" className="flex items-center gap-2.5 text-ink">
-            <Mark size={30} pine="#2A3422" ring="#D28E28" accent="#D28E28" />
-            <span className="wordmark text-[22px] font-semibold">Lullawood</span>
-          </Link>
-          <nav className="ml-auto hidden gap-7 text-[15px] font-semibold text-ink-muted hover:text-ink md:flex">
-            <Link href="/try" className="hover:text-ink">Try free</Link>
-            <Link href="/pricing" className="hover:text-ink">Pricing</Link>
-            <Link href="/login" className="hover:text-ink">Log in</Link>
-          </nav>
-        </div>
-      </header>
+      <Nav />
 
       <section className="mx-auto max-w-6xl px-6 py-[64px]">
         <div className="mx-auto max-w-[760px] text-center">
@@ -95,6 +84,8 @@ export default function HowItWorksPage() {
           </p>
         </div>
       </section>
+
+      <Footer />
     </main>
   );
 }
