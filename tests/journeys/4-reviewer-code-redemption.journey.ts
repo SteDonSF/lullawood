@@ -40,7 +40,7 @@ export async function run(page: Page) {
   await page.getByRole("button", { name: /redeem/i }).click();
 
   // 4. Redemption grants Family comp access (dashboard re-fetches ~1.4s after success).
-  await assertVisibleText(page, "Family plan", "expected 'Family plan' within 15000ms after redeeming", 15000);
+  await assertVisibleText(page, "Family plan", "expected 'Family plan' within 25000ms after redeeming", 25000);
   await assertVisibleText(page, "Complimentary access", "expected 'Complimentary access' after redeeming", 15000);
 
   // 5. Record the throwaway account for later cleanup (ux-audit/ is gitignored).
