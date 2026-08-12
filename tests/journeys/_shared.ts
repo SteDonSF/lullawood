@@ -59,8 +59,20 @@ export async function login(page: Page, email: string, password: string, timeout
     try {
       await attempt();
     } catch {
+      // Surface WHY it failed so we can tell rate-limit (429 / "too many
+      // requests") from bad creds ("invalid email or password") from a genuine
+      // slow redirect — instead of an opaque timeout.
+      let diag = "";
+      try {
+        const url = page.url();
+        const body = ((await page.locator("body").innerText().catch(() => "")) || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200);
+        diag = ` [url=${url}; page="${body}"]`;
+      } catch { /* best-effort */ }
       throw new AssertionError(
-        `login did not reach /dashboard within ${timeout}ms after one retry (check credentials in .env.local)`,
+        `login did not reach /dashboard within ${timeout}ms after one retry (check credentials in .env.local)${diag}`,
       );
     }
   }
