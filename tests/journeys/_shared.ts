@@ -46,33 +46,7 @@ export async function login(page: Page, email: string, password: string, timeout
   // Guard against a late hydration wiping the fields.
   if ((await emailInput.inputValue()) !== email) await emailInput.fill(email);
   if ((await pwInput.inputValue()) !== password) await pwInput.fill(password);
-
-  // ---- DEBUG LOGGING (no logic change) ----------------------------------------
-  const maskEmail = (email || "").slice(0, 3) + "***";
-  const filledEmail = (await emailInput.inputValue().catch(() => "")) || "";
-  const filledPw = (await pwInput.inputValue().catch(() => "")) || "";
-  console.log(
-    `  [login-debug] email=${maskEmail} emailFieldMatches=${filledEmail === email} ` +
-    `pwFilled=${filledPw.length > 0} pwLen=${filledPw.length} expectedPwLen=${(password || "").length}`,
-  );
-  // Capture the sign-in HTTP response (set up before the click, awaited after).
-  const signInResp = page
-    .waitForResponse((r) => r.request().method() === "POST" && /\/api\/auth\//i.test(r.url()), { timeout })
-    .catch(() => null);
-
   await page.getByRole("button", { name: /log in/i }).click();
-
-  const resp = await signInResp;
-  if (resp) {
-    let body = "";
-    try { body = (await resp.text()).replace(/\s+/g, " ").slice(0, 200); } catch { /* ignore */ }
-    console.log(`  [login-debug] sign-in → HTTP ${resp.status()} ${resp.url()}  body="${body}"`);
-  } else {
-    console.log(`  [login-debug] no POST /api/auth/* response captured within ${timeout}ms`);
-  }
-  console.log(`  [login-debug] after submit: url=${page.url()} title="${await page.title().catch(() => "")}"`);
-  // ----------------------------------------------------------------------------
-
   try {
     await page.waitForURL(/\/dashboard/, { timeout });
   } catch {
