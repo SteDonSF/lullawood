@@ -37,6 +37,7 @@ type Child = {
   interests: string[] | null;
   aboutText: string | null;
   avoidList: string[] | null;
+  coStarPreference: string | null;
 };
 
 type HistoryStory = {
@@ -84,6 +85,10 @@ export default function ChildViewPage() {
   const [siblings, setSiblings] = useState<{ id: string; name: string; age: number | null }[]>([]);
   const [coStarId, setCoStarId] = useState<string>("");
 
+  // weekly co-star preference (persisted): the sibling paired every Friday.
+  const [weeklyCoStarId, setWeeklyCoStarId] = useState<string | null>(null);
+  const [savingWeekly, setSavingWeekly] = useState(false);
+
   useEffect(() => {
     if (!session) return;
     fetch("/api/subscription")
@@ -115,12 +120,36 @@ export default function ChildViewPage() {
         return r.json();
       })
       .then((d) => {
-        if (d?.child) setChild(d.child);
+        if (d?.child) {
+          setChild(d.child);
+          setWeeklyCoStarId(d.child.coStarPreference ?? null);
+        }
         if (d?.todaysStory) setWaitingStory({ title: d.todaysStory.title, body: d.todaysStory.body });
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [session, id]);
+
+  // Toggle the weekly Friday co-star. One sibling max: turning one on clears the
+  // rest; turning the active one off clears the preference. Optimistic + PATCH.
+  async function toggleWeekly(siblingId: string) {
+    const next = weeklyCoStarId === siblingId ? null : siblingId;
+    const prev = weeklyCoStarId;
+    setWeeklyCoStarId(next);
+    setSavingWeekly(true);
+    try {
+      const res = await fetch(`/api/profile/${id}/costar`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coStarChildId: next }),
+      });
+      if (!res.ok) throw new Error("save_failed");
+    } catch {
+      setWeeklyCoStarId(prev); // revert on failure
+    } finally {
+      setSavingWeekly(false);
+    }
+  }
 
   useEffect(() => {
     if (!session || !id) return;
@@ -306,6 +335,42 @@ export default function ChildViewPage() {
                 ✦ Tonight, {child.name} and {siblings.find((s) => s.id === coStarId)?.name} share the adventure.
               </p>
             )}
+          </section>
+        )}
+
+        {/* Weekly co-star night (Family tier) — persisted Friday pairing */}
+        {plan === "family" && siblings.length > 0 && (
+          <section className="mb-6 rounded-3xl warm-card p-6">
+            <h2 className="h-display mb-1 text-lg font-semibold text-ink">Weekly adventure together</h2>
+            <p className="mb-4 text-[13px] text-ink-muted">
+              {weeklyCoStarId
+                ? `Every Friday, ${child.name} and ${siblings.find((s) => s.id === weeklyCoStarId)?.name ?? "their sibling"} will share one story automatically.`
+                : `Switch on a sibling and every Friday, ${child.name} and they will share one story automatically.`}
+            </p>
+            <ul className="space-y-2">
+              {siblings.map((s) => {
+                const on = weeklyCoStarId === s.id;
+                return (
+                  <li key={s.id} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-white px-4 py-3">
+                    <span className="text-[14px] font-semibold text-ink">
+                      {s.name}
+                      {s.age != null && <span className="ml-2 text-[12px] font-normal text-ink-muted">age {s.age}</span>}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={on}
+                      aria-label={`Weekly co-star with ${s.name}`}
+                      disabled={savingWeekly}
+                      onClick={() => toggleWeekly(s.id)}
+                      className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-60 ${on ? "bg-gold" : "bg-[#d8c9a8]"}`}
+                    >
+                      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? "left-[22px]" : "left-0.5"}`} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </section>
         )}
 
