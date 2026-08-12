@@ -23,6 +23,8 @@ type Story = {
   body: string;
   createdAt: string;
   isNightly: boolean;
+  coStarChildId: string | null;
+  coStarName: string | null;
 };
 
 function titleOf(s: Story): string {
@@ -128,7 +130,10 @@ export default function StoryLibraryPage() {
                       </span>
                       <span className="text-[12px] text-ink-muted">{relativeNight(s.createdAt)}</span>
                     </div>
-                    <h3 className="h-display mb-1.5 text-[17px] font-semibold text-ink">{titleOf(s)}</h3>
+                    <h3 className="h-display mb-1 text-[17px] font-semibold text-ink">{titleOf(s)}</h3>
+                    {s.coStarChildId && s.coStarName && (
+                      <p className="mb-1.5 text-[12px] font-bold text-gold-text">&#10022; with {s.coStarName}</p>
+                    )}
                     {s.summary && (
                       <p className="mb-3 line-clamp-2 text-[13.5px] leading-relaxed text-ink-muted">{s.summary}</p>
                     )}

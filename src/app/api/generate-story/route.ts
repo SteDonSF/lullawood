@@ -103,24 +103,65 @@ export async function POST(req: NextRequest) {
       }
     } catch { /* fail open */ }
 
-    // ----- RETRIEVE: recent summaries for continuity + anti-repetition -----
+    // ----- Optional co-star (Family-tier sibling story) -----
+    // Fail CLOSED: a co-star is honoured only if it's another child of the SAME
+    // parent. A stranger's childId (or the same child) is rejected/ignored.
+    const coStarChildId = (body as any).coStarChildId ? String((body as any).coStarChildId) : "";
+    let coStar: typeof child | null = null;
+    if (coStarChildId && coStarChildId !== childId) {
+      const [cs] = await db
+        .select()
+        .from(schema.children)
+        .where(and(eq(schema.children.id, coStarChildId), eq(schema.children.parentId, user.id)))
+        .limit(1);
+      if (!cs) return NextResponse.json({ error: "costar_not_found" }, { status: 404 });
+      coStar = cs;
+    }
+
+    const uniq = (arr: (string | null | undefined)[]) =>
+      Array.from(new Set(arr.map((s) => (s ?? "").trim()).filter(Boolean)));
+
+    // ----- RETRIEVE memory: last 3 from EACH hero on a co-star night (6 total),
+    // else the usual rolling window for a solo story. -----
     let previousAdventures: string[] = [];
     try {
-      const recent = await db
+      const mine = await db
         .select({ summary: schema.stories.summary })
         .from(schema.stories)
         .where(eq(schema.stories.childId, childId))
         .orderBy(desc(schema.stories.createdAt))
-        .limit(MEMORY_NIGHTS);
-      previousAdventures = recent
-        .map((r) => (r.summary ?? "").trim())
-        .filter(Boolean);
+        .limit(coStar ? 3 : MEMORY_NIGHTS);
+      previousAdventures = mine.map((r) => (r.summary ?? "").trim()).filter(Boolean);
+      if (coStar) {
+        const theirs = await db
+          .select({ summary: schema.stories.summary })
+          .from(schema.stories)
+          .where(eq(schema.stories.childId, coStar.id))
+          .orderBy(desc(schema.stories.createdAt))
+          .limit(3);
+        previousAdventures = [...previousAdventures, ...theirs.map((r) => (r.summary ?? "").trim()).filter(Boolean)];
+      }
     } catch { /* no memory yet, or read hiccup — generate fresh */ }
 
-    const animal = (child.animals && child.animals[0]) || undefined;
+    // On a co-star night, MERGE the two profiles (union of interests/colours/
+    // avoid-lists/companions/recurring cast); else use the single child's.
+    const interests = coStar ? uniq([...(child.interests ?? []), ...(coStar.interests ?? [])]) : (child.interests ?? []);
+    const colors = coStar ? uniq([...(child.colors ?? []), ...(coStar.colors ?? [])]) : (child.colors ?? []);
+    const avoidAll = coStar ? uniq([...(child.avoidList ?? []), ...(coStar.avoidList ?? [])]) : (child.avoidList ?? []);
+    const animalsAll = coStar ? uniq([...(child.animals ?? []), ...(coStar.animals ?? [])]) : (child.animals ?? []);
+    const recurring = coStar ? uniq([...(child.recurringCharacters ?? []), ...(coStar.recurringCharacters ?? [])]) : (child.recurringCharacters ?? []);
+    const animal = animalsAll[0] || undefined;
+
+    const coStarLine = coStar
+      ? `Tonight is a co-star story. Both ${child.name} and ${coStar.name} are heroes of equal importance. Write them as a genuine team — their dynamic, their banter, their complementary strengths, their shared triumph. Neither overshadows the other. Both must be present throughout.`
+      : "";
+    const bothAnimalsLine = coStar && animalsAll.length > 1
+      ? `Both companions appear together in the story: ${animalsAll.join(" and ")}.`
+      : "";
     const aboutLine = child.aboutText ? `About ${child.name}: ${child.aboutText}` : "";
-    const avoidLine = (child.avoidList && child.avoidList.length)
-      ? `NEVER include any of these (the child dislikes or fears them): ${child.avoidList.join(", ")}.`
+    const coStarAboutLine = coStar && coStar.aboutText ? `About ${coStar.name}: ${coStar.aboutText}` : "";
+    const avoidLine = avoidAll.length
+      ? `NEVER include any of these (a hero dislikes or fears them): ${avoidAll.join(", ")}.`
       : "";
     // Anti-repetition is explicit: the builder shows previousAdventures as
     // continuity; we also tell it plainly not to repeat them.
@@ -135,14 +176,15 @@ export async function POST(req: NextRequest) {
       profile: {
         name: child.name,
         age: child.age ?? undefined,
-        interests: child.interests ?? [],
-        colors: child.colors ?? [],
+        interests,
+        colors,
       },
+      costar: coStar ? { name: coStar.name, age: coStar.age ?? undefined } : undefined,
       animal,
-      customRequest: [tonightLine, aboutLine, avoidLine, antiRepeat].filter(Boolean).join("\n\n") || undefined,
+      customRequest: [tonightLine, coStarLine, aboutLine, coStarAboutLine, avoidLine, bothAnimalsLine, antiRepeat].filter(Boolean).join("\n\n") || undefined,
       targetMinutes: cleanMinutes((body as any).targetMinutes, 5),
       previousAdventures,                                  // <- the memory, fed in
-      recurringCharacters: child.recurringCharacters ?? [], // threaded for durable layer
+      recurringCharacters: recurring,                       // threaded for durable layer
     };
 
     // STREAM the story text so the first words reach the parent in ~1-2s instead
@@ -165,14 +207,25 @@ export async function POST(req: NextRequest) {
           // ----- SAVE + memory: split title, summarise, store the finished story.
           // Runs on the full text before close(); summary is best-effort. -----
           const { title, story } = splitTitle(full);
-          const summary = await summarizeStory(story, child.name);
+          const finalTitle = title || "A Lullawood story";
+          const summary = await summarizeStory(story, coStar ? `${child.name} and ${coStar.name}` : child.name);
           try {
-            await db.insert(schema.stories).values({
-              childId,
-              title: title || "A Lullawood story",
-              body: story,
-              summary: summary || null,
-            });
+            if (coStar) {
+              // Co-star night: ONE story, saved to BOTH libraries — each row
+              // points at the other child, and both share a pair id.
+              const sharedId = crypto.randomUUID();
+              await db.insert(schema.stories).values([
+                { childId: child.id, title: finalTitle, body: story, summary: summary || null, coStarChildId: coStar.id, sharedStoryId: sharedId },
+                { childId: coStar.id, title: finalTitle, body: story, summary: summary || null, coStarChildId: child.id, sharedStoryId: sharedId },
+              ]);
+            } else {
+              await db.insert(schema.stories).values({
+                childId,
+                title: finalTitle,
+                body: story,
+                summary: summary || null,
+              });
+            }
           } catch { /* never let a save hiccup break delivery */ }
 
           controller.close();

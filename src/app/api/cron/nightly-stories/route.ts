@@ -41,6 +41,9 @@ function startOfTodayUTC(): Date {
   return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
 }
 
+const uniq = (arr: (string | null | undefined)[]) =>
+  Array.from(new Set(arr.map((s) => (s ?? "").trim()).filter(Boolean)));
+
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not set" }, { status: 500 });
@@ -58,6 +61,8 @@ export async function GET(req: NextRequest) {
   const db = getDb();
   const dashboardUrl = `${APP_URL.replace(/\/+$/, "")}/dashboard`;
   const todayStart = startOfTodayUTC();
+  // Fridays get the weekly co-star run for Family children with a preference set.
+  const isFriday = new Date().getUTCDay() === 5;
 
   type LogEntry = { userId: string; childId: string; success: boolean; error?: string; emailError?: string; skipped?: boolean };
   const results: LogEntry[] = [];
@@ -68,10 +73,10 @@ export async function GET(req: NextRequest) {
 
   // Every child of every active/trialing subscriber (joined to the auth user for
   // their email + name).
-  let subscribers: { userId: string; email: string; name: string }[];
+  let subscribers: { userId: string; email: string; name: string; plan: string | null }[];
   try {
     subscribers = await db
-      .select({ userId: schema.subscriptions.userId, email: user.email, name: user.name })
+      .select({ userId: schema.subscriptions.userId, email: user.email, name: user.name, plan: schema.subscriptions.plan })
       .from(schema.subscriptions)
       .innerJoin(user, eq(schema.subscriptions.userId, user.id))
       .where(inArray(schema.subscriptions.status, ["trialing", "active"]));
@@ -96,9 +101,22 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
+    // Friday co-star pairing (Family tier): a child with a valid co_star_preference
+    // gets ONE shared story with that sibling instead of two solo stories.
+    const handled = new Set<string>();
+    const kidById = new Map(kids.map((k) => [k.id, k]));
+
     for (const child of kids) {
       // ?childId= limits a test run to a single child (no collateral emails).
       if (onlyChildId && child.id !== onlyChildId) continue;
+      if (handled.has(child.id)) continue;
+
+      let coStar: (typeof schema.children.$inferSelect) | null = null;
+      if (isFriday && sub.plan === "family" && child.coStarPreference) {
+        const pref = kidById.get(child.coStarPreference);
+        if (pref && pref.id !== child.id && !handled.has(pref.id)) coStar = pref;
+      }
+
       total += 1;
       try {
         // Idempotency: skip if a nightly story already exists for today —
@@ -110,26 +128,50 @@ export async function GET(req: NextRequest) {
           .limit(1);
         if (existing && !force) {
           skipped += 1;
+          if (coStar) handled.add(coStar.id);
+          handled.add(child.id);
           results.push({ userId: sub.userId, childId: child.id, success: true, skipped: true });
           continue;
         }
 
-        // Retrieve recent summaries for continuity + anti-repetition.
+        // Retrieve memory: 3 from each hero on a co-star night (6 total), else window.
         let previousAdventures: string[] = [];
         try {
-          const recent = await db
+          const mine = await db
             .select({ summary: schema.stories.summary })
             .from(schema.stories)
             .where(eq(schema.stories.childId, child.id))
             .orderBy(desc(schema.stories.createdAt))
-            .limit(MEMORY_NIGHTS);
-          previousAdventures = recent.map((r) => (r.summary ?? "").trim()).filter(Boolean);
+            .limit(coStar ? 3 : MEMORY_NIGHTS);
+          previousAdventures = mine.map((r) => (r.summary ?? "").trim()).filter(Boolean);
+          if (coStar) {
+            const theirs = await db
+              .select({ summary: schema.stories.summary })
+              .from(schema.stories)
+              .where(eq(schema.stories.childId, coStar.id))
+              .orderBy(desc(schema.stories.createdAt))
+              .limit(3);
+            previousAdventures = [...previousAdventures, ...theirs.map((r) => (r.summary ?? "").trim()).filter(Boolean)];
+          }
         } catch { /* no memory yet — generate fresh */ }
 
-        const animal = (child.animals && child.animals[0]) || undefined;
+        const interests = coStar ? uniq([...(child.interests ?? []), ...(coStar.interests ?? [])]) : (child.interests ?? []);
+        const colors = coStar ? uniq([...(child.colors ?? []), ...(coStar.colors ?? [])]) : (child.colors ?? []);
+        const avoidAll = coStar ? uniq([...(child.avoidList ?? []), ...(coStar.avoidList ?? [])]) : (child.avoidList ?? []);
+        const animalsAll = coStar ? uniq([...(child.animals ?? []), ...(coStar.animals ?? [])]) : (child.animals ?? []);
+        const recurring = coStar ? uniq([...(child.recurringCharacters ?? []), ...(coStar.recurringCharacters ?? [])]) : (child.recurringCharacters ?? []);
+        const animal = animalsAll[0] || undefined;
+
+        const coStarLine = coStar
+          ? `Tonight is a co-star story. Both ${child.name} and ${coStar.name} are heroes of equal importance. Write them as a genuine team — their dynamic, their banter, their complementary strengths, their shared triumph. Neither overshadows the other. Both must be present throughout.`
+          : "";
+        const bothAnimalsLine = coStar && animalsAll.length > 1
+          ? `Both companions appear together in the story: ${animalsAll.join(" and ")}.`
+          : "";
         const aboutLine = child.aboutText ? `About ${child.name}: ${child.aboutText}` : "";
-        const avoidLine = child.avoidList && child.avoidList.length
-          ? `NEVER include any of these (the child dislikes or fears them): ${child.avoidList.join(", ")}.`
+        const coStarAboutLine = coStar && coStar.aboutText ? `About ${coStar.name}: ${coStar.aboutText}` : "";
+        const avoidLine = avoidAll.length
+          ? `NEVER include any of these (a hero dislikes or fears them): ${avoidAll.join(", ")}.`
           : "";
         const antiRepeat = previousAdventures.length
           ? `Do NOT repeat the plots of recent nights listed under continuity — tonight must be a fresh adventure, though familiar friends and places may return.`
@@ -139,14 +181,15 @@ export async function GET(req: NextRequest) {
           profile: {
             name: child.name,
             age: child.age ?? undefined,
-            interests: child.interests ?? [],
-            colors: child.colors ?? [],
+            interests,
+            colors,
           },
+          costar: coStar ? { name: coStar.name, age: coStar.age ?? undefined } : undefined,
           animal,
-          customRequest: [aboutLine, avoidLine, antiRepeat].filter(Boolean).join("\n\n") || undefined,
+          customRequest: [coStarLine, aboutLine, coStarAboutLine, avoidLine, bothAnimalsLine, antiRepeat].filter(Boolean).join("\n\n") || undefined,
           targetMinutes: 5,
           previousAdventures,
-          recurringCharacters: child.recurringCharacters ?? [],
+          recurringCharacters: recurring,
           weeklyTheme: child.weeklyTheme ?? undefined,
         };
 
@@ -155,21 +198,32 @@ export async function GET(req: NextRequest) {
         const { title, story } = splitTitle(raw);
         const finalTitle = title || "A Lullawood story";
 
-        // Save (with tomorrow's memory).
-        const summary = await summarizeStory(story, child.name);
-        await db.insert(schema.stories).values({
-          childId: child.id,
-          title: finalTitle,
-          body: story,
-          summary: summary || null,
-          isNightly: true,
-        });
+        // Save (with tomorrow's memory). Co-star night saves to BOTH libraries.
+        const summary = await summarizeStory(story, coStar ? `${child.name} and ${coStar.name}` : child.name);
+        if (coStar) {
+          const sharedId = crypto.randomUUID();
+          await db.insert(schema.stories).values([
+            { childId: child.id, title: finalTitle, body: story, summary: summary || null, isNightly: true, coStarChildId: coStar.id, sharedStoryId: sharedId },
+            { childId: coStar.id, title: finalTitle, body: story, summary: summary || null, isNightly: true, coStarChildId: child.id, sharedStoryId: sharedId },
+          ]);
+        } else {
+          await db.insert(schema.stories).values({
+            childId: child.id,
+            title: finalTitle,
+            body: story,
+            summary: summary || null,
+            isNightly: true,
+          });
+        }
         succeeded += 1;
+        if (coStar) handled.add(coStar.id);
+        handled.add(child.id);
 
-        // Deliver by email — best-effort. The story is already saved and waiting
-        // in the dashboard even if the inbox delivery hiccups.
+        // Deliver by email — best-effort. Both children share one parent, so a
+        // co-star night sends a single email naming both heroes.
         const firstName = (sub.name || "").trim().split(/\s+/)[0] || "there";
-        const emailRes = await sendNightlyStoryEmail(sub.email, firstName, child.name, finalTitle, story, dashboardUrl);
+        const emailName = coStar ? `${child.name} & ${coStar.name}` : child.name;
+        const emailRes = await sendNightlyStoryEmail(sub.email, firstName, emailName, finalTitle, story, dashboardUrl);
         results.push({ userId: sub.userId, childId: child.id, success: true, emailError: emailRes.success ? undefined : emailRes.error });
       } catch (err) {
         failed += 1;

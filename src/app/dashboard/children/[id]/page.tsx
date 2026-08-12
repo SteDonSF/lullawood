@@ -78,6 +78,35 @@ export default function ChildViewPage() {
   const [history, setHistory] = useState<HistoryStory[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
 
+  // co-star (Family tier, 2+ children): plan gate, the family's other children,
+  // and the currently-selected co-star (one max).
+  const [plan, setPlan] = useState<string | null>(null);
+  const [siblings, setSiblings] = useState<{ id: string; name: string; age: number | null }[]>([]);
+  const [coStarId, setCoStarId] = useState<string>("");
+
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/subscription")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setPlan(d.plan ?? null); })
+      .catch(() => { /* co-star UI just stays hidden if this fails */ });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || !id) return;
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.children) return;
+        setSiblings(
+          d.children
+            .filter((c: { id: string }) => c.id !== id)
+            .map((c: { id: string; name: string; age: number | null }) => ({ id: c.id, name: c.name, age: c.age ?? null })),
+        );
+      })
+      .catch(() => { /* no siblings shown on error */ });
+  }, [session, id]);
+
   useEffect(() => {
     if (!session || !id) return;
     fetch(`/api/profile/${id}`)
@@ -125,7 +154,7 @@ export default function ChildViewPage() {
       const res = await fetch("/api/generate-story", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ childId: id, adventure: tonight.trim() || undefined }),
+        body: JSON.stringify({ childId: id, adventure: tonight.trim() || undefined, coStarChildId: coStarId || undefined }),
       });
       if (!res.ok || !res.body) {
         const d = await res.json().catch(() => ({}));
@@ -244,13 +273,49 @@ export default function ChildViewPage() {
           )}
         </section>
 
+        {/* Co-star (Family tier, 2+ children) — star a sibling alongside tonight */}
+        {plan === "family" && siblings.length > 0 && (
+          <section className="mb-6 rounded-3xl warm-card p-6">
+            <h2 className="h-display mb-1 text-lg font-semibold text-ink">Add a co-star tonight?</h2>
+            <p className="mb-4 text-[13px] text-ink-muted">
+              Star {child.name} alongside a sibling in one shared adventure — both are heroes.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {siblings.map((s) => {
+                const selected = coStarId === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setCoStarId(selected ? "" : s.id)}
+                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-[14px] font-semibold transition ${
+                      selected
+                        ? "border-gold bg-[#f3e7cf] text-gold-text"
+                        : "border-border bg-white text-ink hover:border-gold/50"
+                    }`}
+                  >
+                    {selected && <span aria-hidden>✓</span>}
+                    {s.name}
+                    {s.age != null && <span className="text-[12px] font-normal text-ink-muted">age {s.age}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {coStarId && (
+              <p className="mt-3 text-[13px] font-semibold text-gold-text">
+                ✦ Tonight, {child.name} and {siblings.find((s) => s.id === coStarId)?.name} share the adventure.
+              </p>
+            )}
+          </section>
+        )}
+
         {/* Tonight's story */}
         <section className="night-panel rounded-3xl p-8">
           <div className="mb-5 flex items-center justify-between gap-4">
             <h2 className="h-display text-xl font-semibold text-cream-paper">Tonight&apos;s story</h2>
             <button onClick={writeStory} disabled={generating}
               className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5 disabled:opacity-70">
-              {generating ? "Writing…" : story ? "Write another" : waitingStory ? "Write a different one" : "Write tonight's story"}
+              {generating ? "Writing…" : story ? "Write another" : coStarId ? "Write their story together →" : waitingStory ? "Write a different one" : "Write tonight's story"}
             </button>
           </div>
 

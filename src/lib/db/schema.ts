@@ -27,6 +27,9 @@ export const children = pgTable("children", {
   timezone: text("timezone").default("UTC"),
   // The "story bible" — what makes Lullawood remember.
   recurringCharacters: jsonb("recurring_characters").$type<string[]>().default([]),
+  // Co-star (Family tier): a preferred sibling to pair with on the weekly nightly
+  // co-star run (Fridays). Stores the other child's id. Null = solo nightly.
+  coStarPreference: text("co_star_preference"),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -42,6 +45,11 @@ export const stories = pgTable("stories", {
   // story now" from the dashboard). The dashboard's "tonight's story is ready"
   // state keys off this + createdAt (the generation time). Backfills false.
   isNightly: boolean("is_nightly").default(false).notNull(),
+  // Co-star (Family tier): a sibling story is saved to BOTH children. Each row
+  // points at the OTHER child, and both rows share a sharedStoryId so the pair
+  // is linkable. Null for ordinary solo stories.
+  coStarChildId: text("co_star_child_id"),
+  sharedStoryId: text("shared_story_id"),
   deliveredAt: timestamp("delivered_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb, schema } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 export const runtime = "edge";
 
@@ -42,6 +43,8 @@ export async function GET(
     .from(schema.stories)
     .where(eq(schema.stories.childId, childId));
 
+  // Left-join the co-star child (if any) to surface its name for the badge.
+  const coChild = alias(schema.children, "co_child");
   const stories = await db
     .select({
       id: schema.stories.id,
@@ -50,8 +53,11 @@ export async function GET(
       body: schema.stories.body,
       createdAt: schema.stories.createdAt,
       isNightly: schema.stories.isNightly,
+      coStarChildId: schema.stories.coStarChildId,
+      coStarName: coChild.name,
     })
     .from(schema.stories)
+    .leftJoin(coChild, eq(schema.stories.coStarChildId, coChild.id))
     .where(eq(schema.stories.childId, childId))
     .orderBy(desc(schema.stories.createdAt))
     .limit(limit)
