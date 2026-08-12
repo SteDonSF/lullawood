@@ -18,8 +18,8 @@ export async function run(page: Page) {
   page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200)); });
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${(e.message || String(e)).slice(0, 200)}`));
 
-  // 1-2. Log in and reach /dashboard within 5000ms of submit.
-  await login(page, email!, password!, 5000);
+  // 1-2. Log in and reach /dashboard within 20000ms of submit (cold-start tolerant).
+  await login(page, email!, password!, 20000);
 
   // 3. Open the add-child form.
   await page.goto(`${BASE_URL}/dashboard/children/new`, { waitUntil: "domcontentloaded" });

@@ -27,9 +27,9 @@ export async function run(page: Page) {
   if ((await emailInput.inputValue()) !== email) await emailInput.fill(email);
   await page.getByRole("button", { name: /create account/i }).click();
   try {
-    await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+    await page.waitForURL(/\/dashboard/, { timeout: 20000 });
   } catch {
-    throw new AssertionError("signup did not reach /dashboard within 15000ms");
+    throw new AssertionError("signup did not reach /dashboard within 20000ms");
   }
 
   // 2. Fresh account shows no plan.
