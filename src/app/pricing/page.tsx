@@ -6,6 +6,8 @@
 // =============================================================================
 import type { Metadata } from "next";
 import PricingClient from "./PricingClient";
+import { JsonLd } from "@/components/JsonLd";
+import { productLd } from "@/lib/seo";
 
 export const runtime = "edge";
 
@@ -23,5 +25,10 @@ export const metadata: Metadata = {
 };
 
 export default function PricingPage() {
-  return <PricingClient />;
+  return (
+    <>
+      <JsonLd data={productLd()} />
+      <PricingClient />
+    </>
+  );
 }

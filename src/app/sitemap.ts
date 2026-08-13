@@ -10,6 +10,9 @@ export const runtime = "edge";
 // areas (/dashboard, /admin) are intentionally excluded and also Disallowed in
 // robots.ts.
 // =============================================================================
+// Bump when the public pages meaningfully change, so crawlers know to recrawl.
+const LAST_MODIFIED = "2026-08-13";
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = "https://lullawood.com";
   const paths = [
@@ -24,5 +27,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return paths.map((path) => ({
     url: `${base}${path}`,
+    lastModified: LAST_MODIFIED,
   }));
 }

@@ -1,5 +1,10 @@
 import { Legal } from "@/components/Legal";
-export const metadata = { title: "Terms of Service — Lullawood" };
+export const metadata = {
+  title: "Terms of Service — Lullawood",
+  description:
+    "The terms that govern your use of Lullawood — who can use it, how the nightly story service works, billing and the 7-day free trial, and your responsibilities as the parent or guardian.",
+  alternates: { canonical: "https://lullawood.com/terms" },
+};
 export default function Page() {
   return (
     <Legal title="Terms of Service" updated="25 June 2026">

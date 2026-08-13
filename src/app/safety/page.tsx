@@ -1,5 +1,10 @@
 import { Legal } from "@/components/Legal";
-export const metadata = { title: "Child Safety — Lullawood" };
+export const metadata = {
+  title: "Child Safety — Lullawood",
+  description:
+    "How Lullawood keeps bedtime stories safe: gentle by design, age-aware, and passed through automated safety checks before they ever reach your child — with the controls in a parent's hands.",
+  alternates: { canonical: "https://lullawood.com/safety" },
+};
 export default function Page() {
   return (
     <Legal title="Child Safety" updated="25 June 2026">

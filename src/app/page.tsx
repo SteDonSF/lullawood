@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "@/components/JsonLd";
+import { faqLd } from "@/lib/seo";
 import { Hero } from "@/components/Hero";
 import { WhyLullawood } from "@/components/WhyLullawood";
 import { WorldGallery } from "@/components/WorldGallery";
@@ -11,9 +14,16 @@ import { Footer } from "@/components/Footer";
 import { SectionHead } from "@/components/Section";
 import { DEMO, STEPS, TIERS } from "@/lib/content";
 
+// Own canonical so the homepage isn't confused with fragment/param variants.
+// Title + description are inherited from the root layout metadata.
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
+
 export default function Home() {
   return (
     <main>
+      <JsonLd data={faqLd()} />
       <Hero />
 
       {/* Try teaser — the full demo now lives at /try (shareable + indexable).

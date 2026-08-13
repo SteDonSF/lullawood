@@ -1,5 +1,10 @@
 import { Legal } from "@/components/Legal";
-export const metadata = { title: "Privacy Policy — Lullawood" };
+export const metadata = {
+  title: "Privacy Policy — Lullawood",
+  description:
+    "How Lullawood handles your family's data: what we collect, why, and the choices you have. We never sell data, and you can delete a child's profile and everything tied to it at any time.",
+  alternates: { canonical: "https://lullawood.com/privacy" },
+};
 export default function Page() {
   return (
     <Legal title="Privacy Policy" updated="25 June 2026">
