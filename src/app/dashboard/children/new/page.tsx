@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Mark } from "@/components/Mark";
 import {
@@ -15,7 +15,9 @@ import {
 // is only how we warn the parent BEFORE they type a whole form for nothing.
 const PLAN_CHILD_CAP: Record<string, number> = { dreamer: 1, family: 4 };
 
-type CapState = { plan: string; cap: number; count: number };
+// One notice, two sources: the mount-time check (count >= cap) and a refused
+// save (403 child_limit), which fills in the server's own wording.
+type CapState = { plan: string | null; cap: number | null; message?: string };
 
 function NewChildForm() {
   const params = useSearchParams();
@@ -39,6 +41,13 @@ function NewChildForm() {
   // True when this form was filled from a parked draft (the upgrade round trip).
   const [restored, setRestored] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
+  const noticeRef = useRef<HTMLDivElement>(null);
+
+  // A refused save (the only thing that sets `message`) happens with the Save
+  // button in view, well below the notice — bring the notice to them.
+  useEffect(() => {
+    if (capped?.message) noticeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [capped?.message]);
 
   // ---- On mount: restore a parked draft, then ask where this parent stands ----
   useEffect(() => {
@@ -70,7 +79,7 @@ function NewChildForm() {
       const cap = plan ? PLAN_CHILD_CAP[plan] ?? null : null;
       // Unknown plan or an unreadable count -> say nothing; the server still
       // fails closed on save. A wrong warning is worse than no warning.
-      if (count !== null && cap !== null && count >= cap) setCapped({ plan, cap, count });
+      if (count !== null && cap !== null && count >= cap) setCapped({ plan, cap });
     })();
     return () => { cancelled = true; };
   }, []);
@@ -131,12 +140,25 @@ function NewChildForm() {
     });
     setSaving(false);
 
-    // Refused for a billing reason (402 no plan / 403 at the child cap). The
-    // cap is correct — but everything they typed must survive the trip to
-    // /pricing and back, so park it first and let the form prefill on return.
-    if (res.status === 402 || res.status === 403) {
+    // No subscription at all -> /pricing to pick a plan. Park what they typed
+    // first: the form is about to be unmounted and Stripe returns them to
+    // /dashboard?welcome=1, not here.
+    if (res.status === 402) {
       writePendingChild(payload);
       window.location.href = "/pricing";
+      return;
+    }
+    // At the plan's child cap -> stay put and show the upgrade panel in place.
+    // Still park the draft: the upgrade itself leaves this page for Stripe.
+    if (res.status === 403) {
+      const d = await res.json().catch(() => ({}));
+      if (d.error === "child_limit") {
+        writePendingChild(payload);
+        const plan = typeof d.plan === "string" ? d.plan : null;
+        setCapped({ plan, cap: plan ? PLAN_CHILD_CAP[plan] ?? null : null, message: d.message });
+      } else {
+        setError(d.message || d.error || "Something went wrong saving. Please try again.");
+      }
       return;
     }
     if (!res.ok) {
@@ -175,15 +197,21 @@ function NewChildForm() {
 
           {/* At the cap: say so up front, keep the form usable underneath. */}
           {capped && (
-            <div className="mb-6 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5" role="status">
+            <div ref={noticeRef} className="mb-6 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5" role="status">
               <p className="text-[14.5px] font-semibold text-ink">
-                {capped.plan === "dreamer"
+                {capped.message
+                  ? capped.message
+                  : capped.plan === "dreamer"
                   ? "You've used the one child the Dreamer plan covers."
-                  : `You've used all ${capped.cap} children your plan covers.`}
+                  : capped.cap
+                  ? `You've used all ${capped.cap} children your plan covers.`
+                  : "You've reached your plan's child limit."}
               </p>
               <p className="mt-1.5 text-[13.5px] text-ink-muted">
-                Dreamer covers 1 child. Family covers up to 4, with sibling co-star stories.
-                Fill this in now if you like — we&apos;ll keep it while you upgrade.
+                Dreamer covers 1 child. Family covers up to 4, with sibling co-star stories.{" "}
+                {capped.message
+                  ? "We've kept everything you typed — it will still be here after you upgrade."
+                  : "Fill this in now if you like — we'll keep it while you upgrade."}
               </p>
               <div className="mt-3.5 flex flex-wrap items-center gap-3">
                 {capped.plan === "dreamer" && (

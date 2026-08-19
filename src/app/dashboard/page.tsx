@@ -25,15 +25,15 @@ export default function DashboardPage() {
   const [loadingKids, setLoadingKids] = useState(true);
   const [sub, setSub] = useState<Sub | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
-  // A child typed on /dashboard/children/new but not saved yet (the parent was
-  // at their plan's cap and got sent to /pricing). Stripe's success_url lands
-  // them here, so this card is their only thread back to what they typed.
+  // A child typed on /dashboard/children/new but not saved yet — the parent was
+  // at their plan's cap, or had no plan, and went off to upgrade. Stripe's
+  // success_url lands them here, so this card is their thread back to it.
   const [pendingChild, setPendingChild] = useState<PendingChild | null>(null);
 
   const loadSub = () =>
     fetch("/api/subscription").then((r) => r.json()).then((d) => setSub(d)).catch(() => setSub(null));
 
-  // sessionStorage is browser-only — read it after mount, never during render.
+  // localStorage is browser-only — read it after mount, never during render.
   useEffect(() => {
     setPendingChild(readPendingChild());
   }, []);

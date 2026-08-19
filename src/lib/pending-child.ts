@@ -1,20 +1,25 @@
 // =============================================================================
 // src/lib/pending-child.ts  —  The child a parent typed but couldn't save yet.
 // -----------------------------------------------------------------------------
-// WHY: a Dreamer at their 1-child cap fills in the whole add-child form, the
+// WHY: a Dreamer at their 1-child cap fills in the whole add-child form and the
 //   POST /api/profile is refused (402 no plan / 403 child_limit — correctly,
-//   the server cap fails closed), and we bounce them to /pricing. Stripe then
-//   drops them back on /dashboard?welcome=1, a different page entirely, so
-//   everything they typed used to be gone and they had to retype it.
-// WHAT: the exact POST payload is parked in sessionStorage under one key, so
-//   the form can prefill itself on the way back and the dashboard can offer a
-//   "Finish adding {name}" thread back to it.
+//   the server cap fails closed). Whatever they typed has to survive the trip
+//   through Stripe checkout, which returns them to /dashboard?welcome=1, a
+//   different page entirely.
+// WHAT: the exact POST payload is parked under one key, so the form can prefill
+//   itself on the way back and the dashboard can offer a "Finish adding {name}"
+//   thread back to it.
 // WHO: written + cleared by /dashboard/children/new, read by /dashboard.
-// sessionStorage (not localStorage) on purpose: this is a single upgrade round
-//   trip in one tab, not a draft that should outlive the browser session.
+// STORAGE: localStorage, NOT sessionStorage — Stripe checkout can open in a new
+//   tab, and a per-tab draft would be invisible exactly when it's needed most.
+//   The trade-off is that it outlives the tab, so every read enforces a 24-hour
+//   expiry: a draft older than one upgrade sitting is stale, not a saved form.
 // =============================================================================
 
 export const PENDING_CHILD_KEY = "lullawood:pendingChild";
+
+/** A parked draft is only ever meant to survive one upgrade round trip. */
+export const PENDING_CHILD_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Exactly the body /api/profile POST expects (age as the raw form string; the
 // server clamps + parses it). Storing the payload verbatim keeps write/read
@@ -28,17 +33,28 @@ export type PendingChild = {
   avoidList: string;
 };
 
+// What actually sits in storage: the payload plus when it was parked.
+type StoredPendingChild = PendingChild & { savedAt: number };
+
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
-// Anything unparseable (hand-edited storage, an older shape) reads as "nothing
-// pending" rather than throwing into a render.
+// Anything unparseable (hand-edited storage, an older shape) or expired reads as
+// "nothing pending" rather than throwing into a render.
 export function readPendingChild(): PendingChild | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(PENDING_CHILD_KEY);
+    const raw = window.localStorage.getItem(PENDING_CHILD_KEY);
     if (!raw) return null;
-    const d = JSON.parse(raw) as Partial<PendingChild> | null;
+    const d = JSON.parse(raw) as Partial<StoredPendingChild> | null;
     if (!d || typeof d !== "object") return null;
+
+    // No savedAt (a pre-expiry draft) counts as stale — we can't tell its age.
+    const savedAt = typeof d.savedAt === "number" ? d.savedAt : 0;
+    if (Date.now() - savedAt > PENDING_CHILD_TTL_MS) {
+      clearPendingChild();
+      return null;
+    }
+
     return {
       name: str(d.name),
       age: str(d.age),
@@ -55,17 +71,18 @@ export function readPendingChild(): PendingChild | null {
 export function writePendingChild(child: PendingChild): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(PENDING_CHILD_KEY, JSON.stringify(child));
+    const stored: StoredPendingChild = { ...child, savedAt: Date.now() };
+    window.localStorage.setItem(PENDING_CHILD_KEY, JSON.stringify(stored));
   } catch {
     // Private mode / quota — losing the draft is bad but must never block the
-    // redirect to /pricing, which is the parent's way forward.
+    // parent's way forward (the /pricing bounce or the checkout redirect).
   }
 }
 
 export function clearPendingChild(): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.removeItem(PENDING_CHILD_KEY);
+    window.localStorage.removeItem(PENDING_CHILD_KEY);
   } catch {
     /* nothing to do — an unreadable store is already "no pending child" */
   }
