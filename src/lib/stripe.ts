@@ -41,6 +41,16 @@ export function planFromPriceId(id: string): PlanId | null {
   return null;
 }
 
+// Which billing cadence is this price? Used by the in-place plan swap so a
+// yearly Dreamer becomes a yearly Family — never silently re-cadenced.
+export function intervalFromPriceId(id: string): Interval | null {
+  if (id === process.env.STRIPE_PRICE_DREAMER_MONTHLY) return "monthly";
+  if (id === process.env.STRIPE_PRICE_FAMILY_MONTHLY) return "monthly";
+  if (id === process.env.STRIPE_PRICE_DREAMER_YEARLY) return "yearly";
+  if (id === process.env.STRIPE_PRICE_FAMILY_YEARLY) return "yearly";
+  return null;
+}
+
 // Per-plan child cap. Enforced in the add-a-child flow + story gating.
 export const PLAN_LIMITS: Record<PlanId, { maxChildren: number }> = {
   dreamer: { maxChildren: 1 },

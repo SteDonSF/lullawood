@@ -41,6 +41,15 @@ function NewChildForm() {
   // True when this form was filled from a parked draft (the upgrade round trip).
   const [restored, setRestored] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
+  // True once the in-place switch to Family has gone through on this page.
+  const [upgraded, setUpgraded] = useState(false);
+  // How the mount-time cap check went. "failed" is NOT the same as "not at the
+  // cap": a swallowed fetch error used to look exactly like a parent with room
+  // to spare, which is how the at-cap notice went missing without a trace.
+  const [planCheck, setPlanCheck] = useState<"pending" | "ok" | "failed" | "logged_out">("pending");
+  // Bumped by the "Try again" link to re-run the check without remounting (a
+  // remount would re-restore the draft over anything they have since typed).
+  const [checkNonce, setCheckNonce] = useState(0);
   const noticeRef = useRef<HTMLDivElement>(null);
 
   // A refused save (the only thing that sets `message`) happens with the Save
@@ -49,66 +58,93 @@ function NewChildForm() {
     if (capped?.message) noticeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [capped?.message]);
 
-  // ---- On mount: restore a parked draft, then ask where this parent stands ----
+  // ---- On mount: restore whatever this parent already typed ----
+  // A draft parked by an earlier refused save wins over the ?name= seeds — it
+  // is what they actually typed. Runs once; re-running would overwrite edits.
   useEffect(() => {
-    // 1. A draft parked by an earlier refused save wins over the ?name= seeds —
-    //    it is what this parent actually typed.
     const pending = readPendingChild();
-    if (pending) {
-      setName(pending.name);
-      setAge(pending.age);
-      setAnimal(pending.animals[0] ?? "");
-      setInterests(pending.interests);
-      setAboutText(pending.aboutText);
-      setAvoid(pending.avoidList);
-      // Don't hide restored answers behind the collapsed "+ More" section.
-      if (pending.aboutText.trim() || pending.avoidList.trim()) setMoreOpen(true);
-      setRestored(true);
-    }
-
-    // 2. Current child count + plan -> are they already at their cap?
-    let cancelled = false;
-    (async () => {
-      const [kids, sub] = await Promise.all([
-        fetch("/api/profile").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        fetch("/api/subscription").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      ]);
-      if (cancelled) return;
-      const count = Array.isArray(kids?.children) ? kids.children.length : null;
-      const plan = typeof sub?.plan === "string" ? sub.plan : null;
-      const cap = plan ? PLAN_CHILD_CAP[plan] ?? null : null;
-      // Unknown plan or an unreadable count -> say nothing; the server still
-      // fails closed on save. A wrong warning is worse than no warning.
-      if (count !== null && cap !== null && count >= cap) setCapped({ plan, cap });
-    })();
-    return () => { cancelled = true; };
+    if (!pending) return;
+    setName(pending.name);
+    setAge(pending.age);
+    setAnimal(pending.animals[0] ?? "");
+    setInterests(pending.interests);
+    setAboutText(pending.aboutText);
+    setAvoid(pending.avoidList);
+    // Don't hide restored answers behind the collapsed "+ More" section.
+    if (pending.aboutText.trim() || pending.avoidList.trim()) setMoreOpen(true);
+    setRestored(true);
   }, []);
 
-  // Same checkout flow as the /pricing CTAs: POST /api/checkout -> Stripe hosted URL.
+  // ---- Where does this parent stand: child count + plan vs the cap? ----
+  // Every failure mode reports itself. The server cap still fails closed on
+  // save, but the parent should never fill a whole form on a silent maybe.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [kidsRes, subRes] = await Promise.all([
+        fetch("/api/profile").catch(() => null),
+        fetch("/api/subscription").catch(() => null),
+      ]);
+      if (cancelled) return;
+      if (kidsRes?.status === 401 || subRes?.status === 401) { setPlanCheck("logged_out"); return; }
+      if (!kidsRes?.ok || !subRes?.ok) { setPlanCheck("failed"); return; }
+
+      const kids = await kidsRes.json().catch(() => null);
+      const sub = await subRes.json().catch(() => null);
+      if (cancelled) return;
+
+      const count = Array.isArray(kids?.children) ? kids.children.length : null;
+      if (count === null) { setPlanCheck("failed"); return; }
+
+      const plan = typeof sub?.plan === "string" ? sub.plan : null;
+      const cap = plan ? PLAN_CHILD_CAP[plan] ?? null : null;
+      // A plan name we don't recognise means we genuinely can't tell — say so.
+      // No plan at all is a known state: the save 402s and sends them to /pricing.
+      if (plan && cap === null) { setPlanCheck("failed"); return; }
+
+      setPlanCheck("ok");
+      if (cap !== null && count >= cap) setCapped({ plan, cap });
+    })();
+    return () => { cancelled = true; };
+  }, [checkNonce]);
+
+  // Swap the EXISTING subscription to Family in place (no second subscription,
+  // no second trial, no card re-entry, no leaving this page). See
+  // /api/subscription/upgrade for why this is not a checkout session.
   async function upgradeToFamily() {
     setError("");
     setUpgrading(true);
     try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: "family", interval: "monthly" }),
-      });
+      const res = await fetch("/api/subscription/upgrade", { method: "POST" });
       if (res.status === 401) {
         window.location.href = "/login?next=/dashboard/children/new";
         return;
       }
       const d = await res.json().catch(() => ({}));
-      if (!res.ok || !d.url) {
-        setError(d.error || "Couldn't start checkout. Please try again.");
+
+      if (res.ok) {
+        setCapped(null);
+        setUpgraded(true);
         setUpgrading(false);
+        // They pressed Upgrade mid-save: finish what they were doing. The
+        // route wrote plan=family to our row before responding, so the cap
+        // check on this POST already sees Family.
+        if (name.trim() && age.trim()) await handleSave();
         return;
       }
-      // Park what's typed so far: checkout returns to /dashboard?welcome=1, not here.
-      writePendingChild(currentPayload());
-      window.location.href = d.url; // -> Stripe hosted checkout (Family monthly)
+
+      // Nothing to switch — a reviewer grant, or a lapsed plan. Park what they
+      // typed and let them pick a plan instead of showing them an error.
+      if (d.action === "choose_plan") {
+        writePendingChild(currentPayload());
+        window.location.href = "/pricing";
+        return;
+      }
+
+      setError(d.message || "Couldn't switch your plan. Please try again.");
+      setUpgrading(false);
     } catch {
-      setError("Couldn't start checkout. Please try again.");
+      setError("Couldn't switch your plan. Please try again.");
       setUpgrading(false);
     }
   }
@@ -224,7 +260,43 @@ function NewChildForm() {
                   See all plans
                 </a>
               </div>
+              {capped.plan === "dreamer" && (
+                <p className="mt-2.5 text-[12.5px] text-ink-muted">
+                  Switches your current plan — same card, no new trial, and you stay right here.
+                </p>
+              )}
             </div>
+          )}
+
+          {/* The switch went through: no redirect happened, so say so here. */}
+          {upgraded && (
+            <div className="mb-6 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5" role="status">
+              <p className="text-[14.5px] font-semibold text-ink">You&apos;re on the Family plan.</p>
+              <p className="mt-1.5 text-[13.5px] text-ink-muted">
+                Up to 4 children, with sibling co-star stories. Nothing was charged today.
+              </p>
+            </div>
+          )}
+
+          {/* We couldn't tell where they stand — never silently pretend we could. */}
+          {planCheck === "failed" && (
+            <p className="mb-5 rounded-2xl border border-border bg-cream-paper/60 px-4 py-3 text-[13.5px] text-ink-muted" role="status">
+              We couldn&apos;t check your plan just now, so we can&apos;t say whether you have room for
+              another child. Fill this in and save — we&apos;ll tell you if there&apos;s a problem.{" "}
+              <button type="button" onClick={() => { setPlanCheck("pending"); setCheckNonce((n) => n + 1); }}
+                className="font-bold text-gold-text underline decoration-dotted underline-offset-4 hover:text-ink">
+                Try again
+              </button>
+            </p>
+          )}
+          {planCheck === "logged_out" && (
+            <p className="mb-5 rounded-2xl border border-border bg-cream-paper/60 px-4 py-3 text-[13.5px] text-ink-muted" role="status">
+              You&apos;re not logged in, so we can&apos;t check your plan.{" "}
+              <a href="/login?next=/dashboard/children/new" className="font-bold text-gold-text underline decoration-dotted underline-offset-4 hover:text-ink">
+                Log in
+              </a>{" "}
+              to add a child — anything you type here is kept.
+            </p>
           )}
 
           {/* Came back from /pricing (or Stripe) — reassure them nothing was lost. */}

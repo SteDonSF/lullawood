@@ -13,11 +13,22 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
   const db = getDb();
-  const kids = await db
-    .select()
-    .from(schema.children)
-    .where(eq(schema.children.parentId, user.id))
-    .orderBy(desc(schema.children.createdAt));
+  // A read failure here must be an honest error, not an empty list: callers use
+  // the count to decide whether this parent is at their plan's child cap, and
+  // "couldn't read" must never look like "no children".
+  let kids;
+  try {
+    kids = await db
+      .select()
+      .from(schema.children)
+      .where(eq(schema.children.parentId, user.id))
+      .orderBy(desc(schema.children.createdAt));
+  } catch {
+    return NextResponse.json(
+      { error: "children_unavailable", message: "We couldn't load your children just now." },
+      { status: 503 }
+    );
+  }
 
   // Story count per child (one grouped query, scoped to this parent's children).
   let countMap = new Map<string, number>();

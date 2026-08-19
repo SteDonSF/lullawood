@@ -11,6 +11,11 @@
 //   Dreamer  $8.99/mo  ·  $89.99/yr   (2 months free)
 //   Family   $12.99/mo ·  $129.99/yr  (2 months free)
 // NOTE: not logged in -> the checkout API returns 401; we send them to /login.
+// ALREADY SUBSCRIBED: checkout returns 409 { error: "already_subscribed" }
+//   rather than opening a second subscription. Dreamer -> Family becomes an
+//   in-place switch via /api/subscription/upgrade; anything else points at the
+//   billing portal. Never fall back to a fresh checkout here — that is the
+//   double-subscription bug.
 //
 // LULLAWOOD-FUTURE: founding-family pricing -> a promo banner + promo code at
 //   checkout (allow_promotion_codes is already enabled in the checkout route).
@@ -24,13 +29,60 @@ import { Mark } from "@/components/Mark";
 
 type Interval = "monthly" | "yearly";
 
+type Subscribed = { plan: string | null; requestedPlan: string; upgradeable: boolean; message: string };
+
 export default function PricingClient() {
   const [interval, setInterval] = useState<Interval>("monthly");
   const [loading, setLoading] = useState<string>("");
   const [error, setError] = useState("");
+  // Set when checkout refuses because this parent already has a live plan.
+  const [subscribed, setSubscribed] = useState<Subscribed | null>(null);
+  const [switching, setSwitching] = useState(false);
+  const [switched, setSwitched] = useState(false);
+
+  // The in-place Dreamer -> Family swap. Same route the add-child page uses.
+  async function switchToFamily() {
+    setError("");
+    setSwitching(true);
+    try {
+      const res = await fetch("/api/subscription/upgrade", { method: "POST" });
+      if (res.status === 401) {
+        window.location.href = "/login?next=/pricing";
+        return;
+      }
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSwitched(true);
+        setSubscribed(null);
+        setSwitching(false);
+        return;
+      }
+      setError(d.message || "Couldn't switch your plan. Please try again.");
+      setSwitching(false);
+    } catch {
+      setError("Couldn't switch your plan. Please try again.");
+      setSwitching(false);
+    }
+  }
+
+  async function openPortal() {
+    setError("");
+    setSwitching(true);
+    try {
+      const res = await fetch("/api/billing-portal", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (d.url) { window.location.href = d.url; return; }
+      setError("Couldn't open billing just now. Please try again.");
+      setSwitching(false);
+    } catch {
+      setError("Couldn't open billing just now. Please try again.");
+      setSwitching(false);
+    }
+  }
 
   async function startCheckout(plan: "dreamer" | "family") {
     setError("");
+    setSubscribed(null);
     setLoading(plan);
     try {
       const res = await fetch("/api/checkout", {
@@ -43,6 +95,18 @@ export default function PricingClient() {
         return;
       }
       const d = await res.json().catch(() => ({}));
+      // Already on a live plan: offer the switch (or billing), never a second
+      // checkout — that would be a second subscription on the same customer.
+      if (res.status === 409 && d.error === "already_subscribed") {
+        setSubscribed({
+          plan: d.plan ?? null,
+          requestedPlan: plan,
+          upgradeable: Boolean(d.upgradeable),
+          message: d.message || "You already have an active plan.",
+        });
+        setLoading("");
+        return;
+      }
       if (!res.ok || !d.url) {
         setError(d.error || "Couldn't start checkout. Please try again.");
         setLoading("");
@@ -98,6 +162,46 @@ export default function PricingClient() {
 
         {error && (
           <p className="mb-6 text-center text-[14px] font-semibold text-[#c2553d]">{error}</p>
+        )}
+
+        {subscribed && (
+          <div className="mb-6 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5 text-center" role="status">
+            <p className="text-[14.5px] font-semibold text-ink">{subscribed.message}</p>
+            {subscribed.upgradeable ? (
+              <>
+                <button
+                  onClick={switchToFamily}
+                  disabled={switching}
+                  className="mt-3 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-7 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_20px_rgba(226,161,44,.35)] transition hover:-translate-y-0.5 disabled:opacity-70"
+                >
+                  {switching ? "Switching…" : "Switch to Family →"}
+                </button>
+                <p className="mt-2.5 text-[12.5px] text-ink-muted">
+                  Changes your current plan — same card, no new trial, nothing charged today.
+                </p>
+              </>
+            ) : (
+              <button
+                onClick={openPortal}
+                disabled={switching}
+                className="mt-3 inline-block rounded-full border border-border bg-white px-7 py-2.5 text-[14px] font-bold text-ink-muted transition hover:border-[#d8c39a] hover:text-ink disabled:opacity-70"
+              >
+                {switching ? "Opening…" : "Manage your plan"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {switched && (
+          <div className="mb-6 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5 text-center" role="status">
+            <p className="text-[14.5px] font-semibold text-ink">You&apos;re on the Family plan.</p>
+            <p className="mt-1.5 text-[13.5px] text-ink-muted">
+              Up to 4 children, with sibling co-star stories. Nothing was charged today.{" "}
+              <a href="/dashboard/children/new" className="font-bold text-gold-text underline decoration-dotted underline-offset-4 hover:text-ink">
+                Add a child
+              </a>
+            </p>
+          </div>
         )}
 
         {/* Mobile: surface a safety line above the fold — the ✓ trust strip sits
