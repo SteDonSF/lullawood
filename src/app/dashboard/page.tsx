@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSession, signOut } from "@/lib/auth-client";
 import { Mark } from "@/components/Mark";
+import { readPendingChild, type PendingChild } from "@/lib/pending-child";
 
 type Child = {
   id: string;
@@ -24,9 +25,18 @@ export default function DashboardPage() {
   const [loadingKids, setLoadingKids] = useState(true);
   const [sub, setSub] = useState<Sub | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  // A child typed on /dashboard/children/new but not saved yet (the parent was
+  // at their plan's cap and got sent to /pricing). Stripe's success_url lands
+  // them here, so this card is their only thread back to what they typed.
+  const [pendingChild, setPendingChild] = useState<PendingChild | null>(null);
 
   const loadSub = () =>
     fetch("/api/subscription").then((r) => r.json()).then((d) => setSub(d)).catch(() => setSub(null));
+
+  // sessionStorage is browser-only — read it after mount, never during render.
+  useEffect(() => {
+    setPendingChild(readPendingChild());
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -101,6 +111,27 @@ export default function DashboardPage() {
             Log out
           </button>
         </header>
+
+        {pendingChild && (
+          <section className="mb-6 rounded-3xl border border-gold/50 bg-[#fffdf4] p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-[15px] font-semibold text-ink">
+                  Finish adding {pendingChild.name || "your child"}
+                </p>
+                <p className="mt-1 text-[13px] text-ink-muted">
+                  We kept everything you typed — pick up right where you left off.
+                </p>
+              </div>
+              <a
+                href="/dashboard/children/new"
+                className="shrink-0 rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-5 py-2.5 text-[13px] font-bold text-[#3a2d05] shadow-[0_8px_22px_rgba(226,161,44,.4)] transition hover:-translate-y-0.5"
+              >
+                Continue &rarr;
+              </a>
+            </div>
+          </section>
+        )}
 
         <section className="mb-6 rounded-3xl warm-card p-6">
           {sub?.hasAccess ? (

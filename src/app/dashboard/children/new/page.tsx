@@ -1,7 +1,21 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Mark } from "@/components/Mark";
+import {
+  clearPendingChild,
+  readPendingChild,
+  writePendingChild,
+  type PendingChild,
+} from "@/lib/pending-child";
+
+// Mirrors PLAN_LIMITS in src/lib/stripe.ts. Kept as a local literal on purpose:
+// importing that module into a client component would pull the Stripe SDK into
+// the browser bundle. The server cap in /api/profile stays the authority — this
+// is only how we warn the parent BEFORE they type a whole form for nothing.
+const PLAN_CHILD_CAP: Record<string, number> = { dreamer: 1, family: 4 };
+
+type CapState = { plan: string; cap: number; count: number };
 
 function NewChildForm() {
   const params = useSearchParams();
@@ -19,9 +33,47 @@ function NewChildForm() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  // Dreamer-at-limit state: message + whether an upgrade path exists (Family isn't top-capped).
-  const [atLimit, setAtLimit] = useState<{ message: string; canUpgrade: boolean } | null>(null);
+  // At-the-cap state, read on mount from the real child count + plan so the
+  // notice is up BEFORE the parent types, not only after a refused save.
+  const [capped, setCapped] = useState<CapState | null>(null);
+  // True when this form was filled from a parked draft (the upgrade round trip).
+  const [restored, setRestored] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
+
+  // ---- On mount: restore a parked draft, then ask where this parent stands ----
+  useEffect(() => {
+    // 1. A draft parked by an earlier refused save wins over the ?name= seeds —
+    //    it is what this parent actually typed.
+    const pending = readPendingChild();
+    if (pending) {
+      setName(pending.name);
+      setAge(pending.age);
+      setAnimal(pending.animals[0] ?? "");
+      setInterests(pending.interests);
+      setAboutText(pending.aboutText);
+      setAvoid(pending.avoidList);
+      // Don't hide restored answers behind the collapsed "+ More" section.
+      if (pending.aboutText.trim() || pending.avoidList.trim()) setMoreOpen(true);
+      setRestored(true);
+    }
+
+    // 2. Current child count + plan -> are they already at their cap?
+    let cancelled = false;
+    (async () => {
+      const [kids, sub] = await Promise.all([
+        fetch("/api/profile").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch("/api/subscription").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      if (cancelled) return;
+      const count = Array.isArray(kids?.children) ? kids.children.length : null;
+      const plan = typeof sub?.plan === "string" ? sub.plan : null;
+      const cap = plan ? PLAN_CHILD_CAP[plan] ?? null : null;
+      // Unknown plan or an unreadable count -> say nothing; the server still
+      // fails closed on save. A wrong warning is worse than no warning.
+      if (count !== null && cap !== null && count >= cap) setCapped({ plan, cap, count });
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Same checkout flow as the /pricing CTAs: POST /api/checkout -> Stripe hosted URL.
   async function upgradeToFamily() {
@@ -43,6 +95,8 @@ function NewChildForm() {
         setUpgrading(false);
         return;
       }
+      // Park what's typed so far: checkout returns to /dashboard?welcome=1, not here.
+      writePendingChild(currentPayload());
       window.location.href = d.url; // -> Stripe hosted checkout (Family monthly)
     } catch {
       setError("Couldn't start checkout. Please try again.");
@@ -50,41 +104,39 @@ function NewChildForm() {
     }
   }
 
+  // The exact body we POST — and the exact thing we park when a save is refused.
+  function currentPayload(): PendingChild {
+    return {
+      name: name.trim(),
+      age: age.trim(),
+      animals: animal.trim() ? [animal.trim()] : [],
+      interests,
+      aboutText: aboutText.trim(),
+      avoidList: avoid,
+    };
+  }
+
   async function handleSave() {
     setError("");
-    setAtLimit(null);
     if (!name.trim()) { setError("Please enter your child's name."); return; }
     if (!age.trim()) { setError("Please enter your child's age."); return; }
+
+    const payload = currentPayload();
 
     setSaving(true);
     const res = await fetch("/api/profile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name.trim(),
-        age: age.trim(),
-        animals: animal.trim() ? [animal.trim()] : [],
-        interests,
-        aboutText: aboutText.trim(),
-        avoidList: avoid,
-      }),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
 
-    if (res.status === 402) {
+    // Refused for a billing reason (402 no plan / 403 at the child cap). The
+    // cap is correct — but everything they typed must survive the trip to
+    // /pricing and back, so park it first and let the form prefill on return.
+    if (res.status === 402 || res.status === 403) {
+      writePendingChild(payload);
       window.location.href = "/pricing";
-      return;
-    }
-    if (res.status === 403) {
-      const d = await res.json().catch(() => ({}));
-      if (d.error === "child_limit") {
-        setAtLimit({
-          message: d.message || "You've reached your plan's child limit.",
-          canUpgrade: d.plan === "dreamer",
-        });
-      } else {
-        setError(d.message || "You've reached your plan's child limit.");
-      }
       return;
     }
     if (!res.ok) {
@@ -92,6 +144,8 @@ function NewChildForm() {
       setError(d.error || "Something went wrong saving. Please try again.");
       return;
     }
+    // Saved (201/200) — the draft has served its purpose; nothing left pending.
+    clearPendingChild();
     const d = await res.json().catch(() => ({}));
     window.location.href = d.child?.id ? `/dashboard/children/${d.child.id}` : "/dashboard";
   }
@@ -118,6 +172,39 @@ function NewChildForm() {
           <p className="mb-6 text-center text-[14px] text-ink-muted">
             Just a name and age to start — everything else is optional, and makes tonight&apos;s story feel even more like it was written for them.
           </p>
+
+          {/* At the cap: say so up front, keep the form usable underneath. */}
+          {capped && (
+            <div className="mb-6 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5" role="status">
+              <p className="text-[14.5px] font-semibold text-ink">
+                {capped.plan === "dreamer"
+                  ? "You've used the one child the Dreamer plan covers."
+                  : `You've used all ${capped.cap} children your plan covers.`}
+              </p>
+              <p className="mt-1.5 text-[13.5px] text-ink-muted">
+                Dreamer covers 1 child. Family covers up to 4, with sibling co-star stories.
+                Fill this in now if you like — we&apos;ll keep it while you upgrade.
+              </p>
+              <div className="mt-3.5 flex flex-wrap items-center gap-3">
+                {capped.plan === "dreamer" && (
+                  <button type="button" onClick={upgradeToFamily} disabled={upgrading}
+                    className="rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-6 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_20px_rgba(226,161,44,.35)] transition hover:-translate-y-0.5 disabled:opacity-70">
+                    {upgrading ? "Starting…" : "Upgrade to Family →"}
+                  </button>
+                )}
+                <a href="/pricing" className="text-[13.5px] font-bold text-gold-text underline decoration-dotted underline-offset-4 hover:text-ink">
+                  See all plans
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Came back from /pricing (or Stripe) — reassure them nothing was lost. */}
+          {restored && (
+            <p className="mb-5 rounded-2xl border border-border bg-cream-paper/60 px-4 py-3 text-[13.5px] text-ink-muted" role="status">
+              We kept everything you typed{name.trim() ? ` about ${name.trim()}` : ""} — check it over and save.
+            </p>
+          )}
 
           <label className={labelCls}>Their name <span className="text-gold" aria-hidden>*</span></label>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls}
@@ -152,21 +239,6 @@ function NewChildForm() {
           <input value={avoid} onChange={(e) => setAvoid(e.target.value)} className={inputCls}
             placeholder="e.g. spiders, thunderstorms" />
           </>)}
-
-          {atLimit && (
-            <div className="mb-4 rounded-2xl border border-gold/50 bg-[#fffdf4] p-5 text-center">
-              <p className="text-[14.5px] font-semibold text-ink">{atLimit.message}</p>
-              {atLimit.canUpgrade && (
-                <>
-                  <button type="button" onClick={upgradeToFamily} disabled={upgrading}
-                    className="mt-3 inline-block rounded-full bg-gradient-to-b from-gold to-[#e3ac3c] px-7 py-2.5 text-[14px] font-bold text-[#3a2d05] shadow-[0_8px_20px_rgba(226,161,44,.35)] transition hover:-translate-y-0.5 disabled:opacity-70">
-                    {upgrading ? "Starting…" : "Upgrade to Family →"}
-                  </button>
-                  <p className="mt-2.5 text-[12px] text-ink-muted">Up to 4 children · sibling co-star stories · $12.99/mo</p>
-                </>
-              )}
-            </div>
-          )}
 
           {error && <p className="mb-4 text-[14px] font-semibold text-[#c2553d]">{error}</p>}
 

@@ -59,3 +59,62 @@ test("no internal link on / returns a 404", async ({ page, request }) => {
     expect(res.status(), `internal link ${href} returned ${res.status()}`).not.toBe(404);
   }
 });
+
+// A Dreamer at their 1-child cap used to lose the entire add-child form when the
+// refused save bounced them to /pricing. The typed child is parked in
+// sessionStorage ("lullawood:pendingChild") before the redirect and prefilled on
+// the way back. The plan/count/POST responses are stubbed so this runs without a
+// seeded Dreamer account — the server-side cap itself is covered by journey 3.
+test("a Dreamer at the child cap keeps their typed child across the /pricing bounce", async ({ page }) => {
+  await page.route("**/api/subscription", (route) =>
+    route.fulfill({ json: { hasAccess: true, plan: "dreamer", status: "active" } })
+  );
+  await page.route("**/api/profile", (route) => {
+    if (route.request().method() === "POST") {
+      // Same shape /api/profile returns for a Dreamer already at the cap.
+      return route.fulfill({
+        status: 403,
+        json: { error: "child_limit", plan: "dreamer", message: "The Dreamer plan includes one child." },
+      });
+    }
+    return route.fulfill({ json: { children: [{ id: "kid-1", name: "Arno", age: 8, storyCount: 2 }] } });
+  });
+
+  await page.goto("/dashboard/children/new");
+
+  // The at-the-cap notice appears before a single field is typed — and its
+  // presence means the mount fetches resolved, so the form is hydrated.
+  await expect(page.getByText(/Dreamer covers 1 child\. Family covers up to 4/i)).toBeVisible();
+
+  const nameInput = page.getByPlaceholder("e.g. Arno");
+  const ageInput = page.getByPlaceholder("e.g. 8");
+  const animalInput = page.getByPlaceholder("e.g. fox");
+  const interestsInput = page.getByPlaceholder("e.g. soccer, space, dinosaurs");
+  const aboutInput = page.getByPlaceholder(/Their personality, favourite colour/i);
+  const avoidInput = page.getByPlaceholder("e.g. spiders, thunderstorms");
+
+  await nameInput.fill("Rowan");
+  await ageInput.fill("6");
+  await animalInput.fill("otter");
+  await interestsInput.fill("boats, rockpools");
+  await page.getByRole("button", { name: /more about/i }).click();
+  await aboutInput.fill("Sleeps with a knitted otter called Pip.");
+  await avoidInput.fill("thunderstorms");
+
+  // Refused (403 at the cap) -> bounced to /pricing.
+  await page.getByRole("button", { name: /save and continue/i }).click();
+  // Generous timeout: a cold dev server compiles /pricing on this first hit.
+  await expect(page).toHaveURL(/\/pricing$/, { timeout: 20_000 });
+
+  // Back to the form: every field is exactly as they left it, optional ones included.
+  await page.goto("/dashboard/children/new");
+  await expect(page.getByPlaceholder("e.g. Arno")).toHaveValue("Rowan");
+  await expect(page.getByPlaceholder("e.g. 8")).toHaveValue("6");
+  await expect(page.getByPlaceholder("e.g. fox")).toHaveValue("otter");
+  await expect(page.getByPlaceholder("e.g. soccer, space, dinosaurs")).toHaveValue("boats, rockpools");
+  // The "+ More" section auto-opens so restored answers aren't hidden.
+  await expect(page.getByPlaceholder(/Their personality, favourite colour/i)).toHaveValue(
+    "Sleeps with a knitted otter called Pip."
+  );
+  await expect(page.getByPlaceholder("e.g. spiders, thunderstorms")).toHaveValue("thunderstorms");
+});
