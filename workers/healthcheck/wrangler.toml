@@ -1,0 +1,20 @@
+name = "lullawood-healthcheck"
+main = "index.js"
+compatibility_date = "2026-08-24"
+
+# Cron-only Worker — no public fetch surface. Disable the workers.dev route and
+# preview URLs so it's reachable only by its Cron Trigger.
+workers_dev = false
+preview_urls = false
+
+# 14:00 UTC daily = 7am PT while daylight saving is in effect (6am PST in winter
+# — cron triggers are UTC and don't shift). The report is waiting when the day
+# starts, and the
+# 24h/48h windows it measures cover yesterday plus last night's nightly run.
+# The route is read-only apart from its page_speed + api_events rows, so a
+# re-run never double-sends anything to a customer.
+[triggers]
+crons = ["0 14 * * *"]
+
+# Secret (do not commit) — must equal the Pages project's CRON_SECRET:
+#   cd workers/healthcheck && npx wrangler secret put CRON_SECRET

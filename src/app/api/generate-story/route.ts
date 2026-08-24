@@ -59,14 +59,40 @@ function splitTitle(raw: string): { title: string; story: string } {
   return { title: trimmed.slice(0, nl).trim(), story: trimmed.slice(nl).trim() };
 }
 
+// Thin request log for the daily health check (/api/cron/health-check reads
+// api_events for the 402/429/5xx error rate). Best-effort and awaited only
+// where it's free to do so — a logging failure must never break a generation.
+const ROUTE = "/api/generate-story";
+async function logEvent(
+  db: ReturnType<typeof getDb>,
+  status: number,
+  outcome: string,
+  startedAt: number,
+  meta?: Record<string, unknown>,
+) {
+  try {
+    await db.insert(schema.apiEvents).values({
+      route: ROUTE,
+      status,
+      outcome,
+      durationMs: Date.now() - startedAt,
+      meta: meta ?? null,
+    });
+  } catch { /* never let the log break the request */ }
+}
+
 export async function POST(req: NextRequest) {
   const db = getDb();
+  const startedAt = Date.now();
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
 
   // ---------- MODE A: authenticated, from a saved child (+ memory) ----------
   if (body && (body as any).childId) {
     const user = await getSessionUser(req.headers);
-    if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+    if (!user) {
+      await logEvent(db, 401, "unauthenticated", startedAt);
+      return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+    }
 
     const childId = String((body as any).childId);
 
@@ -75,11 +101,15 @@ export async function POST(req: NextRequest) {
       .from(schema.children)
       .where(and(eq(schema.children.id, childId), eq(schema.children.parentId, user.id)))
       .limit(1);
-    if (!child) return NextResponse.json({ error: "Child not found" }, { status: 404 });
+    if (!child) {
+      await logEvent(db, 404, "child_not_found", startedAt);
+      return NextResponse.json({ error: "Child not found" }, { status: 404 });
+    }
     
     // GATE: require an active trial or subscription to generate (Phase 5).
     const access = await getAccess(user.id);
     if (!access.hasAccess) {
+      await logEvent(db, 402, "no_subscription", startedAt);
       return NextResponse.json(
         { error: "no_subscription", message: "Start a free trial to generate stories." },
         { status: 402 }
@@ -96,6 +126,7 @@ export async function POST(req: NextRequest) {
       );
       const used = Number((rows.rows?.[0] as any)?.n ?? 0);
       if (used >= USER_LIMIT) {
+        await logEvent(db, 429, "rate_limited", startedAt);
         return NextResponse.json(
           { error: "rate_limited", message: "You've made a lot of stories in the last hour — give it a little while." },
           { status: 429 }
@@ -114,7 +145,10 @@ export async function POST(req: NextRequest) {
         .from(schema.children)
         .where(and(eq(schema.children.id, coStarChildId), eq(schema.children.parentId, user.id)))
         .limit(1);
-      if (!cs) return NextResponse.json({ error: "costar_not_found" }, { status: 404 });
+      if (!cs) {
+        await logEvent(db, 404, "costar_not_found", startedAt);
+        return NextResponse.json({ error: "costar_not_found" }, { status: 404 });
+      }
       coStar = cs;
     }
 
@@ -228,8 +262,13 @@ export async function POST(req: NextRequest) {
             }
           } catch { /* never let a save hiccup break delivery */ }
 
+          await logEvent(db, 200, "ok", startedAt, { mode: "authed" });
           controller.close();
         } catch (err) {
+          // The response status was already 200 when the stream opened, so a
+          // failure here never reaches the client as a 5xx — but it IS a failed
+          // request, and that's what the health check's error rate is counting.
+          await logEvent(db, 500, "error", startedAt, { mode: "authed", message: err instanceof Error ? err.message : String(err) });
           try { controller.error(err); } catch { /* already closed */ }
         }
       },
@@ -256,6 +295,7 @@ export async function POST(req: NextRequest) {
     );
     const used = Number((rows.rows?.[0] as any)?.n ?? 0);
     if (used >= LIMIT) {
+      await logEvent(db, 429, "rate_limited", startedAt, { mode: "demo" });
       return NextResponse.json(
         { error: "rate_limited", message: "You've created a few stories already — please try again a little later." },
         { status: 429 }
@@ -305,9 +345,11 @@ export async function POST(req: NextRequest) {
             ok: true,
           });
         } catch {}
+        await logEvent(db, 200, "ok", startedAt, { mode: "demo" });
         controller.close();
       } catch (err) {
         try { await db.insert(schema.demoEvents).values({ ipHash, ok: false }); } catch {}
+        await logEvent(db, 500, "error", startedAt, { mode: "demo", message: err instanceof Error ? err.message : String(err) });
         try { controller.error(err); } catch {}
       }
     },

@@ -117,3 +117,44 @@ export const accessGrants = pgTable("access_grants", {
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// =============================================================================
+// Product health — written by the daily health-check cron (/api/cron/health-check,
+// fired by the lullawood-healthcheck Worker at 14:00 UTC / 7am PT).
+// =============================================================================
+
+// One row per page, per health-check run. The check ALERTS on a breach; this
+// table is the history behind it, so /admin/dashboard can show the trend (last
+// 7 days) rather than only the moment something broke.
+export const pageSpeed = pgTable("page_speed", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  // Path measured, e.g. "/" or "/try".
+  path: text("path").notNull(),
+  // PageSpeed Insights strategy: 'mobile' | 'desktop'. We measure mobile —
+  // that's where bedtime traffic actually is.
+  strategy: text("strategy").notNull().default("mobile"),
+  // Lighthouse performance category, 0-100 (null if the API returned no score).
+  performanceScore: integer("performance_score"),
+  // Core metrics, milliseconds. lcpMs = Largest Contentful Paint,
+  // tbtMs = Total Blocking Time, ttfbMs = server response time.
+  lcpMs: integer("lcp_ms"),
+  tbtMs: integer("tbt_ms"),
+  ttfbMs: integer("ttfb_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Lightweight request log — the raw material for the health check's error-rate
+// and cron-health signals. Deliberately thin (no bodies, no PII): route, HTTP
+// status, an outcome tag, duration, and a small jsonb for run counts. Written
+// best-effort; a failed insert must never break a request.
+export const apiEvents = pgTable("api_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  route: text("route").notNull(),
+  status: integer("status").notNull(),
+  // Short tag: 'ok' | 'rate_limited' | 'no_subscription' | 'error' | 'cron_run'.
+  outcome: text("outcome"),
+  durationMs: integer("duration_ms"),
+  // Small structured extras (e.g. the nightly cron's {total,succeeded,failed}).
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

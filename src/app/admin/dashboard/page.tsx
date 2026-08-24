@@ -14,6 +14,30 @@ type Code = {
   createdAt: string;
 };
 
+// One PageSpeed Insights measurement, as /api/admin/metrics returns it
+// (snake_case, straight from the page_speed table).
+type SpeedRow = {
+  path: string;
+  strategy?: string;
+  performance_score: number | null;
+  lcp_ms: number | null;
+  tbt_ms: number | null;
+  ttfb_ms: number | null;
+  created_at: string;
+};
+
+// Mirrors CONFIG.pageSpeed in src/app/api/cron/health-check/route.ts — these
+// are only for colouring the numbers here; the alert itself is decided there.
+const SPEED_LIMITS = { maxLcpMs: 3500, minScore: 50 };
+
+// Postgres `timestamp` comes back as "2026-08-24 14:00:00" (no zone marker) and
+// is stored in UTC — spell that out so the browser doesn't read it as local.
+function parseStamp(v: string): Date {
+  return new Date(/[Zz]|[+-]\d{2}:?\d{2}$/.test(v) ? v : `${v.replace(" ", "T")}Z`);
+}
+
+const ms = (v: number | null) => (v == null ? "—" : v >= 1000 ? `${(v / 1000).toFixed(2)}s` : `${Math.round(v)}ms`);
+
 function StatusPill({ c }: { c: Code }) {
   const usedUp = c.redemptionsUsed >= c.maxRedemptions;
   const label = !c.active ? "Revoked" : usedUp ? "Used up" : "Active";
@@ -38,6 +62,9 @@ export default function AdminDashboard() {
   const [minting, setMinting] = useState(false);
   const [error, setError] = useState("");
   const [justMinted, setJustMinted] = useState<string | null>(null);
+  const [speedLatest, setSpeedLatest] = useState<SpeedRow[]>([]);
+  const [speedRuns, setSpeedRuns] = useState<SpeedRow[]>([]);
+  const [healthLoading, setHealthLoading] = useState(true);
 
   async function load() {
     try {
@@ -52,7 +79,24 @@ export default function AdminDashboard() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  // Product health — the last 7 days of PageSpeed runs written by the daily
+  // health-check cron. Loaded separately so a metrics hiccup never blocks the
+  // access-code tools above.
+  async function loadHealth() {
+    try {
+      const r = await fetch("/api/admin/metrics");
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      setSpeedLatest(data?.pageSpeed?.latest ?? []);
+      setSpeedRuns(data?.pageSpeed?.runs ?? []);
+    } catch {
+      /* leave the section in its empty state */
+    } finally {
+      setHealthLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); loadHealth(); }, []);
 
   async function mint() {
     setMinting(true);
@@ -178,6 +222,98 @@ export default function AdminDashboard() {
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+
+        <section className="mt-10">
+          <h2 className="mb-1 text-[15px] font-semibold text-ink">Product health</h2>
+          <p className="mb-3 text-[13px] text-ink-muted">
+            PageSpeed Insights (mobile), measured every morning by the health-check cron. It emails
+            only when something breaches a threshold — LCP over {(SPEED_LIMITS.maxLcpMs / 1000).toFixed(1)}s
+            or a score under {SPEED_LIMITS.minScore}.
+          </p>
+
+          {healthLoading ? (
+            <p className="text-[14px] text-ink-muted">Loading…</p>
+          ) : speedRuns.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[#e0d4b8] bg-cream-paper/50 px-6 py-10 text-center">
+              <p className="text-[14px] text-ink-muted">
+                No measurements yet — the first run lands at 7am PT.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Where we stand today: the most recent run per page. */}
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                {speedLatest.map((r) => {
+                  const scoreBad = r.performance_score != null && r.performance_score < SPEED_LIMITS.minScore;
+                  const lcpBad = r.lcp_ms != null && r.lcp_ms > SPEED_LIMITS.maxLcpMs;
+                  return (
+                    <div key={r.path} className="rounded-2xl border border-border bg-white px-5 py-4 shadow-lift">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="font-mono text-[14px] font-semibold text-ink">{r.path}</span>
+                        <span className={`text-[26px] font-semibold leading-none ${scoreBad ? "text-[#9a3b2e]" : "text-[#3f6b3a]"}`}>
+                          {r.performance_score ?? "—"}
+                        </span>
+                      </div>
+                      <dl className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
+                        <div>
+                          <dt className="text-ink-muted">LCP</dt>
+                          <dd className={`font-semibold ${lcpBad ? "text-[#9a3b2e]" : "text-ink"}`}>{ms(r.lcp_ms)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-ink-muted">TBT</dt>
+                          <dd className="font-semibold text-ink">{ms(r.tbt_ms)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-ink-muted">TTFB</dt>
+                          <dd className="font-semibold text-ink">{ms(r.ttfb_ms)}</dd>
+                        </div>
+                      </dl>
+                      <p className="mt-3 text-[11px] text-ink-muted">
+                        Measured {parseStamp(r.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* The trend behind it — every run in the last 7 days, newest first. */}
+              <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-lift">
+                <table className="w-full min-w-[420px] text-left text-[13px]">
+                  <thead>
+                    <tr className="border-b border-border text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+                      <th className="px-4 py-2.5 font-bold">Day</th>
+                      <th className="px-4 py-2.5 font-bold">Page</th>
+                      <th className="px-4 py-2.5 text-right font-bold">Score</th>
+                      <th className="px-4 py-2.5 text-right font-bold">LCP</th>
+                      <th className="px-4 py-2.5 text-right font-bold">TBT</th>
+                      <th className="px-4 py-2.5 text-right font-bold">TTFB</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {speedRuns.map((r, i) => {
+                      const scoreBad = r.performance_score != null && r.performance_score < SPEED_LIMITS.minScore;
+                      const lcpBad = r.lcp_ms != null && r.lcp_ms > SPEED_LIMITS.maxLcpMs;
+                      return (
+                        <tr key={`${r.path}-${r.created_at}-${i}`} className="border-b border-border/50 last:border-0">
+                          <td className="px-4 py-2.5 text-ink-muted">
+                            {parseStamp(r.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-ink">{r.path}</td>
+                          <td className={`px-4 py-2.5 text-right font-semibold ${scoreBad ? "text-[#9a3b2e]" : "text-ink"}`}>
+                            {r.performance_score ?? "—"}
+                          </td>
+                          <td className={`px-4 py-2.5 text-right ${lcpBad ? "font-semibold text-[#9a3b2e]" : "text-ink"}`}>{ms(r.lcp_ms)}</td>
+                          <td className="px-4 py-2.5 text-right text-ink">{ms(r.tbt_ms)}</td>
+                          <td className="px-4 py-2.5 text-right text-ink">{ms(r.ttfb_ms)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
       </div>

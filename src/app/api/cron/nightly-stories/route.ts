@@ -232,5 +232,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Leave a run marker for the daily health check. Without this, "the cron
+  // didn't run" and "the cron ran and delivered nothing" look identical from
+  // the outside. Best-effort — never fail a delivered night over a log row.
+  try {
+    await db.insert(schema.apiEvents).values({
+      route: "/api/cron/nightly-stories",
+      status: 200,
+      outcome: "cron_run",
+      meta: { total, succeeded, failed, skipped, subscribers: subscribers.length },
+    });
+  } catch (err) {
+    console.error("nightly-stories: run log failed —", err instanceof Error ? err.message : String(err));
+  }
+
   return NextResponse.json({ ok: true, total, succeeded, failed, skipped, results });
 }
