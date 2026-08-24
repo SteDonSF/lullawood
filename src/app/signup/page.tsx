@@ -2,6 +2,8 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signUp } from "@/lib/auth-client";
+import { readAttribution } from "@/lib/attribution";
+import { track } from "@/lib/analytics";
 import { Mark } from "@/components/Mark";
 import { PasswordInput } from "@/components/PasswordInput";
 
@@ -20,6 +22,7 @@ function SignupForm() {
   async function handleSignup() {
     setLoading(true);
     setError("");
+    track("signup_started");
     const { error } = await signUp.email({
       name: name.trim(),
       email: email.trim(),
@@ -39,6 +42,27 @@ function SignupForm() {
       setError(friendly);
       return;
     }
+
+    track("signup_completed");
+
+    // First-touch attribution: credit the channel that made the introduction,
+    // which may have been days and a Stripe redirect ago. The server derives
+    // WHO from the session and allowlists WHAT we send, so this call carries a
+    // hint, not authority. Awaited (with a short timeout + keepalive) so the
+    // redirect below cannot cancel it in flight — but never allowed to fail the
+    // signup: the account already exists by this point.
+    try {
+      await fetch("/api/attribution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(readAttribution() ?? {}),
+        keepalive: true,
+        signal: AbortSignal.timeout(3000),
+      });
+    } catch {
+      /* attribution is a marketing nicety — never block the parent on it */
+    }
+
     if (childName) {
       const qs = new URLSearchParams({ name: childName });
       if (childAge) qs.set("age", childAge);

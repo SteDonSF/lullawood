@@ -66,3 +66,61 @@ Cloudflare Pages → **Custom domains → Set up a domain** → `lullawood.com` 
 - Have the **legal pages** (privacy / terms / child-safety) reviewed by counsel for your jurisdiction — there is a `TODO` on governing law in `terms`.
 - Confirm **testimonial permission** from each friend quoted.
 - Confirm the **Lullawood trademark** position before public launch.
+
+---
+
+## Admin dashboard + weekly digest (added 2026-08-22)
+
+### Secrets
+
+All are Cloudflare secrets, read server-side only. None are `NEXT_PUBLIC_*` —
+the Plausible API key in particular must never reach the browser.
+
+```bash
+# Plausible Stats API — powers the funnel section.
+npx wrangler pages secret put PLAUSIBLE_API_KEY --project-name=lullawood
+
+# Cloudflare Access JWT verification (see SECURITY below). Strongly recommended.
+npx wrangler pages secret put CF_ACCESS_TEAM_DOMAIN --project-name=lullawood  # lullawood.cloudflareaccess.com
+npx wrangler pages secret put CF_ACCESS_AUD --project-name=lullawood          # Access app > Overview > Application Audience (AUD) Tag
+
+# Where the Monday digest goes (optional; defaults to the owner address).
+npx wrangler pages secret put DIGEST_TO --project-name=lullawood
+
+# The digest Worker needs the SAME CRON_SECRET as the other cron Workers.
+cd workers/digest && npx wrangler secret put CRON_SECRET && npx wrangler deploy
+```
+
+Pages secrets need a redeploy to take effect on this project.
+
+### SECURITY — the admin wall
+
+`/api/admin/*` is protected by `requireAccess()` in `src/lib/access.ts`, NOT by
+the page being behind Cloudflare Access. Two independent layers:
+
+1. **Host allowlist** — admin routes answer only on `lullawood.com` /
+   `www.lullawood.com`. Cloudflare Access is bound to a hostname, so
+   `lullawood.pages.dev` and per-deployment `<hash>.lullawood.pages.dev` sit
+   OUTSIDE the wall. This layer needs no configuration and holds on its own.
+2. **JWT verification** — when `CF_ACCESS_TEAM_DOMAIN` + `CF_ACCESS_AUD` are
+   set, the `Cf-Access-Jwt-Assertion` is verified against Cloudflare's JWKS
+   (RS256 signature, audience, issuer, expiry). Unset, it degrades to a
+   presence check, which is safe only because layer 1 guarantees the request
+   arrived on a hostname where Cloudflare itself set that header.
+
+Do not remove layer 1 on the assumption that layer 2 covers it.
+
+Also worth doing in the Cloudflare dashboard: add an Access application
+covering `*.lullawood.pages.dev`, or disable preview URLs for the project, so
+the origin is never reachable off the canonical hostname at all.
+
+### Verify the wall
+
+```bash
+# Behind Access on the apex -> 302 to the Access login.
+curl -s -o /dev/null -w "%{http_code}\n" https://lullawood.com/api/admin/metrics
+
+# Off the canonical host -> 403, even with a forged assertion header.
+curl -s -H "Cf-Access-Jwt-Assertion: forged" \
+  https://lullawood.pages.dev/api/admin/metrics
+```

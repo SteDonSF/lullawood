@@ -1,24 +1,32 @@
 // =============================================================================
 // /api/cron/health-check  —  the daily "is anything broken?" run
 // -----------------------------------------------------------------------------
-// WHAT: runs six automated checks against the live site and the database, records
-//   what it measured, and emails ONE alert listing every breach. If nothing
-//   breached a threshold it sends nothing at all — silence means everything
-//   passed. That silence is the feature: an email always means "look at this".
-// TRIGGER: the lullawood-healthcheck Cron Worker (workers/healthcheck) fetches
-//   this URL daily at 14:00 UTC / 7am PT. Pages Functions can't own a cron.
-// SECURITY: not public. Caller must send  Authorization: Bearer <CRON_SECRET>
-//   — the same shared secret as the other crons. Any mismatch -> 401.
-// ON DEMAND: add ?dry=1 to render the full report and send the email even when
-//   nothing breached, so you can see the numbers whenever you want. Still gated
-//   by CRON_SECRET; ?dry=1 does NOT skip the page_speed write (the run is real).
+// WHAT: six checks against the live site, Plausible, and the database. Emails
+//   ONE message listing every breach — and nothing at all when nothing breached.
+//   Silence is the feature: an email in the inbox always means "look at this".
+// TRIGGER: the lullawood-healthcheck Worker (workers/healthcheck) owns the cron
+//   and fires this at 14:00 UTC / 7am PT.
+// SECURITY: same pattern as the weekly digest and the other cron routes —
+//   Authorization: Bearer <CRON_SECRET>, 401 on any mismatch. Not behind
+//   Cloudflare Access, because a Worker cannot pass an Access check; the shared
+//   secret is the wall.
+// DRY RUN: ?dry=1 renders the full report AND sends it, even with nothing
+//   breached, so the numbers can be seen on demand. (This differs from the
+//   digest's ?dry=1, which renders without sending — here the point is to prove
+//   the whole path, delivery included, still works.)
+//
+// WHAT IT REUSES: api_events and metrics_daily (0005_admin_metrics.sql),
+//   src/lib/plausible.ts for the Stats API, and src/lib/metrics.ts for the SQL.
+//   The only thing it adds is page_speed — an outside-in measurement of the
+//   public site, which is not a request log and doesn't belong in api_events.
 //
 // TUNING: every threshold lives in CONFIG below. Change a number there — never
 //   in the logic underneath it.
 // =============================================================================
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
+import { getGenerationErrors, getNightlyCronHealth } from "@/lib/metrics";
+import { fetchVisitors, lastHours, plausibleConfigured } from "@/lib/plausible";
 import { sendHealthAlertEmail } from "@/lib/resend";
 
 export const runtime = "edge";
@@ -27,15 +35,12 @@ export const runtime = "edge";
 // CONFIG — every threshold, window and target. Tune here.
 // =============================================================================
 const CONFIG = {
-  // The origin every check measures against.
   site: "https://lullawood.com",
 
-  // Where the alert lands. HEALTHCHECK_ALERT_TO wins; WAITLIST_NOTIFY is the
-  // fallback so this works with the env vars the project already has. If NEITHER
-  // is set the run still executes and reports, but can't email — and says so.
-  alertTo: process.env.HEALTHCHECK_ALERT_TO || process.env.WAITLIST_NOTIFY || "",
+  // Same convention as the digest's DIGEST_TO.
+  alertTo: process.env.HEALTHCHECK_TO || "stephenpdonnelly@gmail.com",
 
-  // --- 1. PAGE SPEED (Google PageSpeed Insights, free tier, no key needed) ---
+  // --- 1. PAGE SPEED (PageSpeed Insights — free, no key needed at this volume) ---
   pageSpeed: {
     paths: ["/", "/try"],
     strategy: "mobile",          // where bedtime traffic actually is
@@ -46,9 +51,9 @@ const CONFIG = {
 
   // --- 2. UPTIME + LATENCY ---
   uptime: {
-    // HEAD on the pages; OPTIONS on the API so we ping the route without
-    // burning a story generation. Next auto-answers OPTIONS for a route handler,
-    // but 405 is an equally healthy "the route is there" — hence alsoOk.
+    // HEAD on the pages; OPTIONS on the API so the route is pinged without
+    // burning a story generation. Next answers OPTIONS for a route handler, but
+    // a 405 is an equally healthy "the route is there" — hence alsoOk.
     targets: [
       { path: "/", method: "HEAD" as const, alsoOk: [] as number[] },
       { path: "/try", method: "HEAD" as const, alsoOk: [] as number[] },
@@ -62,7 +67,7 @@ const CONFIG = {
   // --- 3. FUNNEL RATE (Plausible) ---
   funnel: {
     windowHours: 24,
-    goal: "demo_started",
+    goal: "demo_started" as const,
     pages: ["/", "/try"],        // visitors to these are the denominator
     minRate: 0.06,               // ALERT below 6%...
     minVisitors: 50,             // ...but only once there's enough volume to mean anything
@@ -71,37 +76,24 @@ const CONFIG = {
   // --- 4. CONVERSION DROUGHT (Plausible) ---
   conversion: {
     windowHours: 48,
-    goal: "signup_completed",
+    goal: "signup_completed" as const,
     minVisitors: 150,            // ALERT only if this many visitors produced zero signups
   },
 
   // --- 5. CRON HEALTH (nightly story delivery) ---
   cron: {
-    route: "/api/cron/nightly-stories",
     windowHours: 26,             // the 18:00 UTC nightly run + slack, seen from a 14:00 UTC check
   },
 
-  // --- 6. ERROR RATE (api_events) ---
+  // --- 6. ERROR RATE (api_events, route 'generate-story') ---
   errorRate: {
-    route: "/api/generate-story",
     windowHours: 24,
     maxRate: 0.05,               // ALERT above 5% of requests
     minRequests: 20,             // ...but only with enough traffic; 1-of-1 isn't a 100% error rate
-    // What counts as an error. These feed the SQL filter directly, so editing
-    // them here really does change what the check counts.
+    // These feed the SQL filter directly, so editing them really does change
+    // what the check counts.
     errorStatuses: [402, 429],   // payment-required + rate-limited
     serverErrorFrom: 500,        // ...plus anything at or above this
-  },
-
-  // Plausible Stats API. Self-hosters point PLAUSIBLE_HOST elsewhere. When the
-  // key or site id is missing, checks 3 + 4 report "skipped" and stay silent —
-  // an unconfigured check is not a breach. When they ARE configured and the API
-  // errors, that IS reported: a check that can't run is worth knowing about.
-  plausible: {
-    host: process.env.PLAUSIBLE_HOST || "https://plausible.io",
-    siteId: process.env.PLAUSIBLE_SITE_ID || "",
-    apiKey: process.env.PLAUSIBLE_API_KEY || "",
-    timeoutMs: 15_000,
   },
 };
 
@@ -110,8 +102,7 @@ const CONFIG = {
 // =============================================================================
 type Status = "pass" | "alert" | "skipped" | "error";
 
-// One line of the email: the metric, its value, the threshold it broke, and
-// where. Formatted by breachLine() so every line reads the same way.
+/** One line of the email: the metric, its value, the threshold, and where. */
 type Breach = { metric: string; value: string; threshold: string; target: string };
 
 type CheckResult = {
@@ -129,8 +120,9 @@ const asInt = (v: unknown): number | null => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n) : null;
 };
+const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-// fetch with a hard timeout — no check may hang the whole run.
+/** fetch with a hard timeout — no single check may hang the whole run. */
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -142,8 +134,8 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 }
 
 // =============================================================================
-// 1. PAGE SPEED — PageSpeed Insights for each path; record every run, alert on
-//    a bad LCP or a bad performance score.
+// 1. PAGE SPEED — measure both pages, record every run, alert on a bad LCP or
+//    a bad performance score.
 // =============================================================================
 async function checkPageSpeed(db: ReturnType<typeof getDb>): Promise<CheckResult> {
   const { paths, strategy, maxLcpMs, minPerformanceScore, timeoutMs } = CONFIG.pageSpeed;
@@ -174,8 +166,8 @@ async function checkPageSpeed(db: ReturnType<typeof getDb>): Promise<CheckResult
           ttfbMs: asInt(lh?.audits?.["server-response-time"]?.numericValue),
           error: null as string | null,
         };
-      } catch (err) {
-        return { path, target, score: null, lcpMs: null, tbtMs: null, ttfbMs: null, error: err instanceof Error ? err.message : String(err) };
+      } catch (e) {
+        return { path, target, score: null, lcpMs: null, tbtMs: null, ttfbMs: null, error: msg(e) };
       }
     }),
   );
@@ -188,8 +180,8 @@ async function checkPageSpeed(db: ReturnType<typeof getDb>): Promise<CheckResult
       continue;
     }
 
-    // Record every measurement, breach or not — this table is the trend the
-    // admin dashboard reads.
+    // Record every measurement, breach or not — this is the trend the admin
+    // dashboard reads under Product health.
     try {
       await db.insert(schema.pageSpeed).values({
         path: r.path,
@@ -199,8 +191,8 @@ async function checkPageSpeed(db: ReturnType<typeof getDb>): Promise<CheckResult
         tbtMs: r.tbtMs,
         ttfbMs: r.ttfbMs,
       });
-    } catch (err) {
-      console.error("health-check: page_speed insert failed —", err instanceof Error ? err.message : String(err));
+    } catch (e) {
+      console.error("health-check: page_speed insert failed —", msg(e));
     }
 
     details.push(
@@ -238,18 +230,18 @@ async function checkUptime(): Promise<CheckResult> {
       const started = Date.now();
       try {
         // The awaited fetch resolves on response headers, so this elapsed time
-        // is TTFB, not full body download.
+        // is TTFB, not a full body download.
         const res = await fetchWithTimeout(target, { method: t.method, headers: { "x-health-check": "1" } }, timeoutMs);
-        return { ...t, target, status: res.status, ms: Date.now() - started, error: null as string | null };
-      } catch (err) {
-        return { ...t, target, status: 0, ms: Date.now() - started, error: err instanceof Error ? err.message : String(err) };
+        return { ...t, target, status: res.status, elapsed: Date.now() - started, error: null as string | null };
+      } catch (e) {
+        return { ...t, target, status: 0, elapsed: Date.now() - started, error: msg(e) };
       }
     }),
   );
 
   for (const r of results) {
     const healthy = r.error === null && ((r.status >= 200 && r.status < 300) || r.alsoOk.includes(r.status));
-    details.push(`${r.method} ${r.path}: ${r.error ? `failed (${r.error})` : r.status} in ${r.ms}ms`);
+    details.push(`${r.method} ${r.path}: ${r.error ? `failed (${r.error})` : r.status} in ${r.elapsed}ms`);
 
     if (!healthy) {
       breaches.push({
@@ -260,45 +252,22 @@ async function checkUptime(): Promise<CheckResult> {
       });
     }
     // Latency is only meaningful on a response we actually got.
-    if (r.error === null && r.ms > maxTtfbMs) {
-      breaches.push({ metric: "TTFB", value: secs(r.ms), threshold: `${secs(maxTtfbMs)} max`, target: r.target });
+    if (r.error === null && r.elapsed > maxTtfbMs) {
+      breaches.push({ metric: "TTFB", value: secs(r.elapsed), threshold: `${secs(maxTtfbMs)} max`, target: r.target });
     }
   }
 
   return { name: "Uptime + latency", status: breaches.length ? "alert" : "pass", detail: details.join(" · "), breaches };
 }
 
-// =============================================================================
-// Plausible Stats API v2 — one small query helper for checks 3 + 4.
-// Returns the first metric of the first result row.
-// =============================================================================
-function isoHoursAgo(hours: number): [string, string] {
-  const now = Date.now();
-  return [new Date(now - hours * 3600_000).toISOString(), new Date(now).toISOString()];
-}
-
-async function plausibleMetric(metric: string, dateRange: [string, string], filters: unknown[]): Promise<number> {
-  const { host, siteId, apiKey, timeoutMs } = CONFIG.plausible;
-  const res = await fetchWithTimeout(
-    `${host.replace(/\/+$/, "")}/api/v2/query`,
-    {
-      method: "POST",
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ site_id: siteId, metrics: [metric], date_range: dateRange, filters }),
-    },
-    timeoutMs,
-  );
-  if (!res.ok) throw new Error(`Plausible HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const json = (await res.json()) as any;
-  return Number(json?.results?.[0]?.metrics?.[0] ?? 0);
-}
-
-const plausibleConfigured = () => Boolean(CONFIG.plausible.apiKey && CONFIG.plausible.siteId);
-
+// A Plausible check that can't run because the key is missing is SKIPPED, not
+// breached — an unconfigured check is not a product failure. A key that IS set
+// and fails is reported: a check that should have run and didn't is worth an
+// alert of its own.
 const notConfigured = (name: string): CheckResult => ({
   name,
   status: "skipped",
-  detail: "skipped — PLAUSIBLE_API_KEY / PLAUSIBLE_SITE_ID not set",
+  detail: "skipped — PLAUSIBLE_API_KEY is not set",
   breaches: [],
 });
 
@@ -311,15 +280,15 @@ async function checkFunnel(): Promise<CheckResult> {
   if (!plausibleConfigured()) return notConfigured(name);
 
   const { windowHours, goal, pages, minRate, minVisitors } = CONFIG.funnel;
-  const range = isoHoursAgo(windowHours);
+  const range = lastHours(windowHours);
   const target = `${CONFIG.site} ${pages.join(" + ")}`;
 
   try {
-    // Both numerators/denominators are UNIQUE VISITORS, so the ratio is
-    // people ÷ people rather than events ÷ people.
+    // Both sides are UNIQUE VISITORS, so the ratio is people ÷ people rather
+    // than events ÷ people — one visitor hammering the demo can't fake a rate.
     const [visitors, converted] = await Promise.all([
-      plausibleMetric("visitors", range, [["is", "event:page", pages]]),
-      plausibleMetric("visitors", range, [["is", "event:goal", [goal]]]),
+      fetchVisitors(range, { pages }),
+      fetchVisitors(range, { goal }),
     ]);
 
     if (visitors < minVisitors) {
@@ -342,14 +311,18 @@ async function checkFunnel(): Promise<CheckResult> {
           }]
         : [];
 
-    return { name, status: breaches.length ? "alert" : "pass", detail: `${pct(rate)} — ${converted} of ${visitors} visitors in ${windowHours}h`, breaches };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      name,
+      status: breaches.length ? "alert" : "pass",
+      detail: `${pct(rate)} — ${converted} of ${visitors} visitors in ${windowHours}h`,
+      breaches,
+    };
+  } catch (e) {
     return {
       name,
       status: "error",
-      detail: `Plausible query failed — ${msg}`,
-      breaches: [{ metric: "Funnel check", value: `could not run — ${msg}`, threshold: "Plausible must answer", target }],
+      detail: `Plausible query failed — ${msg(e)}`,
+      breaches: [{ metric: "Funnel check", value: `could not run — ${msg(e)}`, threshold: "Plausible must answer", target }],
     };
   }
 }
@@ -362,12 +335,12 @@ async function checkConversionDrought(): Promise<CheckResult> {
   if (!plausibleConfigured()) return notConfigured(name);
 
   const { windowHours, goal, minVisitors } = CONFIG.conversion;
-  const range = isoHoursAgo(windowHours);
+  const range = lastHours(windowHours);
 
   try {
     const [visitors, signups] = await Promise.all([
-      plausibleMetric("visitors", range, []),
-      plausibleMetric("visitors", range, [["is", "event:goal", [goal]]]),
+      fetchVisitors(range),
+      fetchVisitors(range, { goal }),
     ]);
 
     const breaches: Breach[] =
@@ -380,42 +353,35 @@ async function checkConversionDrought(): Promise<CheckResult> {
           }]
         : [];
 
-    return { name, status: breaches.length ? "alert" : "pass", detail: `${signups} signups from ${visitors} visitors in ${windowHours}h`, breaches };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      name,
+      status: breaches.length ? "alert" : "pass",
+      detail: `${signups} signups from ${visitors} visitors in ${windowHours}h`,
+      breaches,
+    };
+  } catch (e) {
     return {
       name,
       status: "error",
-      detail: `Plausible query failed — ${msg}`,
-      breaches: [{ metric: "Conversion check", value: `could not run — ${msg}`, threshold: "Plausible must answer", target: CONFIG.site }],
+      detail: `Plausible query failed — ${msg(e)}`,
+      breaches: [{ metric: "Conversion check", value: `could not run — ${msg(e)}`, threshold: "Plausible must answer", target: CONFIG.site }],
     };
   }
 }
 
 // =============================================================================
 // 5. CRON HEALTH — did the nightly run, and did it actually deliver?
-//    "Ran" is true if the cron logged a run OR nightly stories exist in the
-//    window; the second half means this check works on the very first day,
-//    before api_events has any history.
+//    "Ran" is true if the cron left a marker in api_events OR nightly stories
+//    exist in the window; the second half keeps this honest for the nights
+//    before the marker started being written.
 // =============================================================================
-async function checkCronHealth(db: ReturnType<typeof getDb>): Promise<CheckResult> {
+async function checkCronHealth(): Promise<CheckResult> {
   const name = "Cron health";
-  const { route, windowHours } = CONFIG.cron;
-  const hours = sql.raw(String(windowHours));
+  const { windowHours } = CONFIG.cron;
+  const target = "/api/cron/nightly-stories";
 
   try {
-    const [runsRes, deliveredRes, subsRes] = await Promise.all([
-      db.execute(sql`select count(*)::int as n from api_events
-                     where route = ${route} and created_at > now() - interval '${hours} hours'`),
-      db.execute(sql`select count(*)::int as n from stories
-                     where is_nightly = true and created_at > now() - interval '${hours} hours'`),
-      db.execute(sql`select count(*)::int as n from subscriptions
-                     where status in ('trialing','active')`),
-    ]);
-
-    const runs = Number((runsRes.rows?.[0] as any)?.n ?? 0);
-    const delivered = Number((deliveredRes.rows?.[0] as any)?.n ?? 0);
-    const activeSubs = Number((subsRes.rows?.[0] as any)?.n ?? 0);
+    const { runs, delivered, activeSubscriptions } = await getNightlyCronHealth(windowHours);
     const ran = runs > 0 || delivered > 0;
 
     const breaches: Breach[] = [];
@@ -424,30 +390,29 @@ async function checkCronHealth(db: ReturnType<typeof getDb>): Promise<CheckResul
         metric: `Nightly cron run (${windowHours}h)`,
         value: "no run recorded",
         threshold: "1 run per night",
-        target: route,
+        target,
       });
-    } else if (delivered === 0 && activeSubs > 0) {
+    } else if (delivered === 0 && activeSubscriptions > 0) {
       breaches.push({
         metric: "stories_delivered (last night)",
-        value: `0, with ${activeSubs} active subscription${activeSubs === 1 ? "" : "s"}`,
-        threshold: `>0 whenever active subscriptions > 0`,
-        target: route,
+        value: `0, with ${activeSubscriptions} active subscription${activeSubscriptions === 1 ? "" : "s"}`,
+        threshold: ">0 whenever active subscriptions > 0",
+        target,
       });
     }
 
     return {
       name,
       status: breaches.length ? "alert" : "pass",
-      detail: `${runs} run${runs === 1 ? "" : "s"} logged, ${delivered} nightly stories delivered, ${activeSubs} active subs`,
+      detail: `${runs} run${runs === 1 ? "" : "s"} logged, ${delivered} nightly stories delivered, ${activeSubscriptions} active subs`,
       breaches,
     };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (e) {
     return {
       name,
       status: "error",
-      detail: `query failed — ${msg}`,
-      breaches: [{ metric: "Cron health check", value: `could not run — ${msg}`, threshold: "query must succeed", target: route }],
+      detail: `query failed — ${msg(e)}`,
+      breaches: [{ metric: "Cron health check", value: `could not run — ${msg(e)}`, threshold: "query must succeed", target }],
     };
   }
 }
@@ -455,49 +420,46 @@ async function checkCronHealth(db: ReturnType<typeof getDb>): Promise<CheckResul
 // =============================================================================
 // 6. ERROR RATE — 402s / 429s / 5xx as a share of story generations, last 24h.
 // =============================================================================
-async function checkErrorRate(db: ReturnType<typeof getDb>): Promise<CheckResult> {
+async function checkErrorRate(): Promise<CheckResult> {
   const name = "Error rate";
-  const { route, windowHours, maxRate, minRequests, errorStatuses, serverErrorFrom } = CONFIG.errorRate;
-  const hours = sql.raw(String(windowHours));
-  const target = `${CONFIG.site}${route}`;
-
-  // Built from CONFIG, not hardcoded — integers only, so this can't be injected.
-  const statusList = sql.raw(errorStatuses.map((n) => String(Math.trunc(n))).join(", "));
-  const serverFrom = sql.raw(String(Math.trunc(serverErrorFrom)));
+  const { windowHours, maxRate, minRequests, errorStatuses, serverErrorFrom } = CONFIG.errorRate;
+  const target = `${CONFIG.site}/api/generate-story`;
 
   try {
-    const res = await db.execute(sql`
-      select count(*)::int as total,
-             count(*) filter (where status in (${statusList}) or status >= ${serverFrom})::int as bad
-      from api_events
-      where route = ${route} and created_at > now() - interval '${hours} hours'`);
-
-    const total = Number((res.rows?.[0] as any)?.total ?? 0);
-    const bad = Number((res.rows?.[0] as any)?.bad ?? 0);
+    const { total, errors } = await getGenerationErrors(windowHours, errorStatuses, serverErrorFrom);
 
     if (total < minRequests) {
-      return { name, status: "pass", detail: `${bad}/${total} errors in ${windowHours}h — below the ${minRequests}-request floor`, breaches: [] };
+      return {
+        name,
+        status: "pass",
+        detail: `${errors}/${total} errors in ${windowHours}h — below the ${minRequests}-request floor`,
+        breaches: [],
+      };
     }
 
-    const rate = bad / total;
+    const rate = errors / total;
     const breaches: Breach[] =
       rate > maxRate
         ? [{
             metric: `${errorStatuses.join("/")}/${serverErrorFrom}+ rate (${windowHours}h)`,
-            value: `${pct(rate)} (${bad} of ${total} requests)`,
+            value: `${pct(rate)} (${errors} of ${total} requests)`,
             threshold: `${pct(maxRate)} max`,
             target,
           }]
         : [];
 
-    return { name, status: breaches.length ? "alert" : "pass", detail: `${pct(rate)} — ${bad} of ${total} requests in ${windowHours}h`, breaches };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      name,
+      status: breaches.length ? "alert" : "pass",
+      detail: `${pct(rate)} — ${errors} of ${total} requests in ${windowHours}h`,
+      breaches,
+    };
+  } catch (e) {
     return {
       name,
       status: "error",
-      detail: `query failed — ${msg}`,
-      breaches: [{ metric: "Error-rate check", value: `could not run — ${msg}`, threshold: "query must succeed", target }],
+      detail: `query failed — ${msg(e)}`,
+      breaches: [{ metric: "Error-rate check", value: `could not run — ${msg(e)}`, threshold: "query must succeed", target }],
     };
   }
 }
@@ -512,7 +474,7 @@ export async function GET(req: NextRequest) {
   const provided = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (provided !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const dry = ["1", "true"].includes((new URL(req.url).searchParams.get("dry") || "").toLowerCase());
+  const dry = new URL(req.url).searchParams.get("dry") === "1";
   const startedAt = Date.now();
   const db = getDb();
 
@@ -523,45 +485,53 @@ export async function GET(req: NextRequest) {
     checkUptime(),
     checkFunnel(),
     checkConversionDrought(),
-    checkCronHealth(db),
-    checkErrorRate(db),
+    checkCronHealth(),
+    checkErrorRate(),
   ]);
 
   const breaches = checks.flatMap((c) => c.breaches);
   const lines = breaches.map(breachLine);
   const reportLines = checks.map((c) => `[${c.status.toUpperCase()}] ${c.name}: ${c.detail}`);
 
-  // THE RULE: email only on a breach. ?dry=1 always sends, so you can see the
-  // report on demand.
+  const subject = breaches.length
+    ? `Lullawood alert — ${breaches.length} issue${breaches.length === 1 ? "" : "s"}`
+    : "Lullawood health check — all clear";
+
+  const stamp = new Date().toISOString().replace("T", " ").slice(0, 16);
+  const body = [
+    `Lullawood — health check ${stamp} UTC`,
+    "",
+    ...(breaches.length ? lines.map((l) => `- ${l}`) : ["Nothing breached a threshold."]),
+    // The real alert is the breach list alone. A ?dry=1 run also carries the
+    // full report, which is the whole reason to ask for one.
+    ...(dry ? ["", "FULL REPORT", ...reportLines] : []),
+    "",
+    "Dashboard: https://lullawood.com/admin/dashboard",
+  ].join("\n");
+
+  // THE RULE: email only on a breach. ?dry=1 always sends.
   let emailed = false;
   let emailError: string | undefined;
   if (breaches.length > 0 || dry) {
-    if (!CONFIG.alertTo) {
-      emailError = "no recipient — set HEALTHCHECK_ALERT_TO (or WAITLIST_NOTIFY)";
-      console.error(`health-check: ${breaches.length} breach(es) but ${emailError}`);
-    } else {
-      const subject = breaches.length
-        ? `Lullawood alert — ${breaches.length} issue${breaches.length === 1 ? "" : "s"}`
-        : "Lullawood health check — all clear";
-      // The real alert is breaches only. A ?dry=1 run also carries the full report.
-      const res = await sendHealthAlertEmail(CONFIG.alertTo, subject, lines, dry ? reportLines : []);
-      emailed = res.success;
-      if (!res.success) emailError = res.error;
-    }
+    const sent = await sendHealthAlertEmail(CONFIG.alertTo, subject, body);
+    emailed = sent.success;
+    emailError = sent.error;
   }
 
   const durationMs = Date.now() - startedAt;
 
-  // Log the run itself, so a health check that stops running is itself visible.
+  // Log the run into the same thin request log everything else uses, so a health
+  // check that quietly stops running is itself visible.
   try {
     await db.insert(schema.apiEvents).values({
-      route: "/api/cron/health-check",
+      route: "cron-health-check",
       status: 200,
-      outcome: "cron_run",
       durationMs,
-      meta: { breaches: breaches.length, dry, emailed },
+      detail: `breaches=${breaches.length}${dry ? " dry=1" : ""}${emailed ? " emailed" : ""}`,
     });
-  } catch { /* logging must never break the run */ }
+  } catch {
+    /* the log is diagnostics, never a dependency */
+  }
 
   console.log(`health-check: ${breaches.length} breach(es) in ${durationMs}ms${dry ? " (dry)" : ""}${emailed ? " — emailed" : ""}`);
 
@@ -572,6 +542,7 @@ export async function GET(req: NextRequest) {
     breachCount: breaches.length,
     emailed,
     ...(emailError ? { emailError } : {}),
+    subject,
     breaches: lines,
     checks: checks.map(({ name, status, detail }) => ({ name, status, detail })),
   });

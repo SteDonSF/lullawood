@@ -2,6 +2,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Mark } from "@/components/Mark";
+import { track } from "@/lib/analytics";
 
 function NewChildForm() {
   const params = useSearchParams();
@@ -27,6 +28,9 @@ function NewChildForm() {
   async function upgradeToFamily() {
     setError("");
     setUpgrading(true);
+    // Same funnel step as the /pricing CTAs, tagged so the at-limit upgrade
+    // path is separable from a cold plan choice.
+    track("checkout_started", { plan: "family", from: "child_limit" });
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -93,6 +97,7 @@ function NewChildForm() {
       return;
     }
     const d = await res.json().catch(() => ({}));
+    track("child_added");
     window.location.href = d.child?.id ? `/dashboard/children/${d.child.id}` : "/dashboard";
   }
 

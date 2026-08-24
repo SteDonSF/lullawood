@@ -3,82 +3,79 @@
 Runs the daily product health check. A Cloudflare **Cron Trigger** fires this
 Worker at **14:00 UTC (7am PT)**; it calls the secret-gated Pages route
 `https://lullawood.com/api/cron/health-check`, which runs six checks and emails
-**one** alert listing every breach.
+**one** message listing every breach.
 
-**Silence means everything passed.** The route sends no email at all when
-nothing crossed a threshold — so an email in your inbox always means "look at
-this".
+**Silence means everything passed.** No email is sent when nothing crossed a
+threshold — so an email in the inbox always means "look at this".
 
 Pages Functions can't hold a cron trigger, which is why this separate Worker
-exists (same shape as `workers/cron` and `workers/nightly`).
+exists (same shape as `workers/cron`, `workers/nightly` and `workers/digest`).
 
 ## The checks
 
-| # | Check | Alerts when |
-|---|---|---|
-| 1 | **Page speed** — PageSpeed Insights (mobile) for `/` and `/try` | LCP > 3.5s, or performance score < 50 |
-| 2 | **Uptime + latency** — `/`, `/try`, `/pricing` (HEAD), `/api/generate-story` (OPTIONS) | any non-2xx, or TTFB > 2s |
-| 3 | **Funnel rate** — Plausible: `demo_started` ÷ unique visitors on `/` + `/try`, 24h | below 6% — only once 50+ visitors |
-| 4 | **Conversion drought** — Plausible: `signup_completed`, 48h | 150+ visitors produced zero signups |
-| 5 | **Cron health** — nightly delivery | the nightly cron didn't run, or delivered 0 stories while active subs > 0 |
-| 6 | **Error rate** — `api_events`, 24h | 402/429/5xx above 5% of `/api/generate-story` requests |
+| # | Check | Alerts when | Reads |
+|---|---|---|---|
+| 1 | **Page speed** — PageSpeed Insights (mobile), `/` and `/try` | LCP > 3.5s, or score < 50 | PSI API → writes `page_speed` |
+| 2 | **Uptime + latency** — `/`, `/try`, `/pricing` (HEAD), `/api/generate-story` (OPTIONS) | any non-2xx, or TTFB > 2s | the live site |
+| 3 | **Funnel rate** — `demo_started` ÷ unique visitors on `/` + `/try`, 24h | below 6% — only at 50+ visitors | Plausible Stats API |
+| 4 | **Conversion drought** — `signup_completed`, 48h | 150+ visitors, zero signups | Plausible Stats API |
+| 5 | **Cron health** — nightly delivery | the nightly cron didn't run, or delivered 0 while active subs > 0 | `api_events`, `stories`, `subscriptions` |
+| 6 | **Error rate** — story generation, 24h | 402/429/5xx above 5% of requests | `api_events` |
 
-Every check records what it measured: check 1 writes a row per page per run into
-`page_speed` (surfaced on `/admin/dashboard` under **Product health**), and the
-run itself is logged to `api_events`.
+Checks 3 and 4 use the funnel events the site already fires (`src/lib/analytics.ts`)
+through the existing Stats API client (`src/lib/plausible.ts`). Checks 5 and 6
+read the `api_events` log that `/api/generate-story` already writes. The SQL for
+both lives in `src/lib/metrics.ts` alongside the rest of the dashboard's queries.
 
 **All thresholds live in one `CONFIG` object at the top of
 `src/app/api/cron/health-check/route.ts`.** Tune the numbers there — never in
 the logic below them.
 
+## What it adds to the database
+
+One table, `page_speed` (`drizzle/0006_health_check.sql`). It is not a request
+log — it's an outside-in measurement of the public site on a schedule, which is
+why it doesn't live in `api_events`. The last 7 days are surfaced on
+`/admin/dashboard` under **Product health**.
+
+The nightly-stories cron now also writes one run marker per night to
+`api_events` (`route = 'cron-nightly-stories'`). Without it, "the cron never
+fired" and "it fired and delivered nothing" are indistinguishable from outside,
+and check 5 can only report the vaguer of the two.
+
 ## One-time setup
 
 ```bash
-# 1. Create the two tables (once, against your Neon database).
-psql "$DATABASE_URL" -f drizzle/0003_health_check.sql
-#    ...or `npm run db:push` if you'd rather let drizzle-kit diff the schema.
+# 1. Create the page_speed table (once, against Neon).
+psql "$DATABASE_URL" -f drizzle/0006_health_check.sql
 
-# 2. Same CRON_SECRET this Worker sends must already be on the Pages project
-#    (it is — the trial-reminder and nightly crons share it):
-npx wrangler pages secret put CRON_SECRET --project-name=lullawood   # if not set yet
+# 2. Where the alert lands (defaults to stephenpdonnelly@gmail.com, same as
+#    the digest's DIGEST_TO).
+npx wrangler pages secret put HEALTHCHECK_TO --project-name=lullawood
 
-# 3. Where the alert lands, on the Pages project:
-npx wrangler pages secret put HEALTHCHECK_ALERT_TO --project-name=lullawood
-
-# 4. (Optional) Plausible, for checks 3 + 4. Without these the two funnel
-#    checks report "skipped" and stay silent — they never false-alarm.
-npx wrangler pages secret put PLAUSIBLE_API_KEY --project-name=lullawood
-npx wrangler pages secret put PLAUSIBLE_SITE_ID --project-name=lullawood   # e.g. lullawood.com
-
-# 5. Redeploy Pages so the route picks up the new secrets (env changes need a
-#    fresh deploy on this project).
+# 3. Redeploy Pages so the route ships and picks up the secret.
 npx @cloudflare/next-on-pages \
   && npx wrangler pages deploy .vercel/output/static --project-name=lullawood
 
-# 6. Secret on this Worker (so it can send the Bearer token), then deploy it.
+# 4. Secret on this Worker (same CRON_SECRET the other crons use), then deploy.
 cd workers/healthcheck
 npx wrangler secret put CRON_SECRET
 npx wrangler deploy
 ```
 
-### Environment variables the route reads
+`CRON_SECRET`, `RESEND_API_KEY`, `DATABASE_URL`, `PLAUSIBLE_API_KEY` and
+`PLAUSIBLE_SITE_ID` are already set on the Pages project — the digest and admin
+dashboard use them. `PAGESPEED_API_KEY` is optional; PSI is free without a key
+at this volume.
 
-| Variable | Where | Needed for |
-|---|---|---|
-| `CRON_SECRET` | Pages **and** this Worker | authenticating the call (shared with the other crons) |
-| `HEALTHCHECK_ALERT_TO` | Pages | the alert recipient (falls back to `WAITLIST_NOTIFY`) |
-| `RESEND_API_KEY` | Pages | sending the alert (already set) |
-| `DATABASE_URL` | Pages | checks 5 + 6, and the `page_speed` history (already set) |
-| `PLAUSIBLE_API_KEY` | Pages | checks 3 + 4 — omit and they skip |
-| `PLAUSIBLE_SITE_ID` | Pages | checks 3 + 4 — omit and they skip |
-| `PLAUSIBLE_HOST` | Pages | only if self-hosting Plausible (default `https://plausible.io`) |
-| `PAGESPEED_API_KEY` | Pages | optional — PSI is free without a key at this volume |
+If `PLAUSIBLE_API_KEY` were ever unset, checks 3 and 4 report `skipped` and stay
+silent rather than firing a false alert.
 
 ## Verify
 
 ```bash
-# See the whole report on demand — ?dry=1 renders every check and ALWAYS emails,
-# even when nothing breached.
+# The whole report on demand. ?dry=1 renders every check AND sends the email,
+# even with nothing breached, so it proves delivery works too.
 curl -s -H "Authorization: Bearer $CRON_SECRET" \
   "https://lullawood.com/api/cron/health-check?dry=1" | jq
 
@@ -100,5 +97,5 @@ are measured in parallel.
 `crons = ["0 14 * * *"]` — daily 14:00 UTC. Cron triggers are UTC and don't
 follow daylight saving, so this is 7am PT in summer and 6am PST in winter.
 Change it in `wrangler.toml` and re-`deploy`. Daily is safe: the run only reads
-the site, writes its own `page_speed` / `api_events` rows, and emails at most
-one message.
+the site, writes its own `page_speed` and `api_events` rows, and sends at most
+one email.

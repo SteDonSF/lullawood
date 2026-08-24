@@ -25,6 +25,7 @@ import {
   sendPaymentFailedEmail,
   sendPaymentRecoveredEmail,
 } from "@/lib/resend";
+import { trackServer } from "@/lib/analytics-server";
 
 export const runtime = "edge";
 
@@ -129,6 +130,24 @@ export async function POST(req: NextRequest) {
             const parent = await lookupParent(db, userId);
             if (parent) await sendWelcomeEmail(parent.email, parent.firstName);
           } catch { /* email is non-critical */ }
+
+          // Funnel: the bottom of it. Fired HERE and never from the browser —
+          // the post-checkout redirect is skippable and forgeable, this is not.
+          // The parent's first-touch channel rides along as a prop, because a
+          // server-side event carries no session for Plausible to attribute.
+          try {
+            const [row] = await db
+              .select({ source: user.signupSource })
+              .from(user)
+              .where(eq(user.id, userId))
+              .limit(1);
+            const priceId = sub.items.data[0]?.price?.id;
+            await trackServer("subscription_active", {
+              plan: (priceId ? planFromPriceId(priceId) : null) ?? "unknown",
+              status: sub.status,
+              source: row?.source ?? "unknown",
+            });
+          } catch { /* analytics is non-critical — never retry a good webhook */ }
         }
         break;
       }

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, jsonb, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { user } from "../auth-schema";
 
 // Re-export the auth user table so getDb()'s `import * as schema` sees it,
@@ -118,43 +118,69 @@ export const accessGrants = pgTable("access_grants", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// =============================================================================
-// Product health — written by the daily health-check cron (/api/cron/health-check,
-// fired by the lullawood-healthcheck Worker at 14:00 UTC / 7am PT).
-// =============================================================================
+// Manually-entered ad spend, per source per month. Meta's Marketing API needs
+// app review before it will hand over spend programmatically, so until that
+// clears this number is typed in once a month on the admin dashboard.
+// MONEY IS STORED IN CENTS as an integer — never a float. $412.30 is 41230.
+// One row per (source, month); the entry form upserts on that pair.
+export const channelSpend = pgTable("channel_spend", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Matches user.signup_source values (see src/lib/attribution.ts KNOWN_SOURCES).
+  source: text("source").notNull(),
+  // 'YYYY-MM'. Text, not a date, because the grain IS the month.
+  month: text("month").notNull(),
+  amountCents: integer("amount_cents").notNull().default(0),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  sourceMonth: uniqueIndex("channel_spend_source_month_idx").on(t.source, t.month),
+}));
 
-// One row per page, per health-check run. The check ALERTS on a breach; this
-// table is the history behind it, so /admin/dashboard can show the trend (last
-// 7 days) rather than only the moment something broke.
-export const pageSpeed = pgTable("page_speed", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  // Path measured, e.g. "/" or "/try".
-  path: text("path").notNull(),
-  // PageSpeed Insights strategy: 'mobile' | 'desktop'. We measure mobile —
-  // that's where bedtime traffic actually is.
-  strategy: text("strategy").notNull().default("mobile"),
-  // Lighthouse performance category, 0-100 (null if the API returned no score).
-  performanceScore: integer("performance_score"),
-  // Core metrics, milliseconds. lcpMs = Largest Contentful Paint,
-  // tbtMs = Total Blocking Time, ttfbMs = server response time.
-  lcpMs: integer("lcp_ms"),
-  tbtMs: integer("tbt_ms"),
-  ttfbMs: integer("ttfb_ms"),
+// Thin request log for the product-health panel. Written ONLY on the paths that
+// panel reports on — generation failures, 402s, 429s — plus a latency sample on
+// success. Deliberately not a general access log: this table should stay small
+// enough to query without an index scan hurting, and hold nothing personal
+// beyond the user id.
+export const apiEvents = pgTable("api_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  route: text("route").notNull(),          // e.g. 'generate-story'
+  status: integer("status").notNull(),     // HTTP status we returned
+  durationMs: integer("duration_ms"),      // null when not measured
+  userId: text("user_id"),                 // nullable: the demo has no user
+  detail: text("detail"),                  // short reason slug, never free text from a user
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Lightweight request log — the raw material for the health check's error-rate
-// and cron-health signals. Deliberately thin (no bodies, no PII): route, HTTP
-// status, an outcome tag, duration, and a small jsonb for run counts. Written
-// best-effort; a failed insert must never break a request.
-export const apiEvents = pgTable("api_events", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  route: text("route").notNull(),
-  status: integer("status").notNull(),
-  // Short tag: 'ok' | 'rate_limited' | 'no_subscription' | 'error' | 'cron_run'.
-  outcome: text("outcome"),
-  durationMs: integer("duration_ms"),
-  // Small structured extras (e.g. the nightly cron's {total,succeeded,failed}).
-  meta: jsonb("meta").$type<Record<string, unknown>>(),
+// Daily snapshot of the five health-strip numbers, written once a day by the
+// existing trial-reminder cron. WHY IT EXISTS: without it, the "7-day average"
+// on the dashboard had to be RECONSTRUCTED from subscription timestamps, which
+// cannot see plan changes, refunds, or any status that was later overwritten —
+// we store only a subscription's current status, never its history. One row a
+// day turns those averages from inferred into measured.
+// Keyed by day so a re-run overwrites rather than double-counting.
+export const metricsDaily = pgTable("metrics_daily", {
+  day: text("day").primaryKey(),            // 'YYYY-MM-DD' (UTC)
+  activeSubscriptions: integer("active_subscriptions").notNull().default(0),
+  mrrCents: integer("mrr_cents").notNull().default(0),
+  trialsInFlight: integer("trials_in_flight").notNull().default(0),
+  storiesDelivered: integer("stories_delivered").notNull().default(0),
+  failedPayments: integer("failed_payments").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// PageSpeed Insights history — one row per page, per daily health-check run
+// (/api/cron/health-check). The check ALERTS on a breach; this table is the
+// trend behind it, surfaced on /admin/dashboard under Product health. Kept
+// separate from api_events because it isn't a request log: it's a measurement
+// of the public site taken from outside, on a schedule.
+export const pageSpeed = pgTable("page_speed", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  path: text("path").notNull(),                        // '/' or '/try'
+  strategy: text("strategy").notNull().default("mobile"),
+  performanceScore: integer("performance_score"),      // Lighthouse 0-100
+  lcpMs: integer("lcp_ms"),                            // Largest Contentful Paint
+  tbtMs: integer("tbt_ms"),                            // Total Blocking Time
+  ttfbMs: integer("ttfb_ms"),                          // server response time
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

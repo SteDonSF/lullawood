@@ -15,6 +15,7 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { user } from "@/lib/auth-schema";
 import { sendTrialEndingEmail } from "@/lib/resend";
+import { snapshotDailyMetrics } from "@/lib/metrics";
 
 export const runtime = "edge";
 
@@ -80,7 +81,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, scanned, sent, failed });
+    // Piggyback the daily metrics snapshot on this run. It is the only cron we
+    // already have at daily cadence, and the admin dashboard's 7-day averages
+    // are only "measured" rather than "reconstructed" once seven of these
+    // exist. Deliberately AFTER the emails and deliberately unable to fail
+    // them: snapshotDailyMetrics() swallows its own errors and returns a bool.
+    const snapshot = await snapshotDailyMetrics();
+
+    return NextResponse.json({ ok: true, scanned, sent, failed, snapshot });
   } catch (err) {
     return NextResponse.json(
       { error: "cron_failed", message: err instanceof Error ? err.message : String(err) },

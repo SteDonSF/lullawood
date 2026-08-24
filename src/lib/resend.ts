@@ -195,44 +195,35 @@ export function sendNightlyStoryEmail(
 }
 
 // =============================================================================
-// Health-check alert — the ONE email the daily health check sends, and only when
-// something breached a threshold (silence means everything passed). This is an
-// ops email to the founder, not a customer email: plain, dense, scannable. No
-// storybook shell, no marketing footer — just the breaches and the numbers.
+// Weekly operator digest — the Monday 8am PT email.
+// -----------------------------------------------------------------------------
+// Deliberately plain: monospace, no button, no marketing shell. This is an
+// internal instrument panel, and the whole point is to read it on a phone in
+// ten seconds without opening the dashboard.
 // =============================================================================
-export function sendHealthAlertEmail(
-  to: string,
-  subject: string,
-  breachLines: string[],
-  reportLines: string[] = [],
-): Promise<EmailResult> {
-  const list = breachLines.length
-    ? `<ul style="margin:0 0 22px;padding-left:20px">${breachLines
-        .map((l) => `<li style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#2A3422">${esc(l)}</li>`)
-        .join("")}</ul>`
-    : `<p style="margin:0 0 22px;font-size:14px;color:#3f6b3a">All checks passed — nothing breached a threshold.</p>`;
-
-  // The full report only rides along on a ?dry=1 run, so the real alert email
-  // stays exactly as long as the list of things that are actually wrong.
-  const report = reportLines.length
-    ? `<h2 style="margin:24px 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#8a7d63;font-family:Arial,sans-serif">Full report</h2>
-       <pre style="margin:0;padding:14px;background:#F6F1E4;border:1px solid #EADBBE;border-radius:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.6;color:#2A3422;white-space:pre-wrap">${esc(reportLines.join("\n"))}</pre>`
-    : "";
-
-  const html = `<!doctype html><html><body style="margin:0;background:#F2EAD8;padding:32px 16px;font-family:Georgia,'Times New Roman',serif">
-  <div style="max-width:640px;margin:0 auto;background:#FBF6EA;border:1px solid #EADBBE;border-radius:18px;padding:30px">
-    <p style="margin:0 0 18px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;font-size:12px;font-weight:bold;color:#D28E28">Lullawood · daily health check</p>
-    <h1 style="margin:0 0 18px;font-size:20px;line-height:1.35;color:#2A3422">${esc(subject)}</h1>
-    ${list}${report}
+export function sendWeeklyDigestEmail(to: string, subject: string, body: string): Promise<EmailResult> {
+  const html = `<!doctype html><html><body style="margin:0;background:#F2EAD8;padding:28px 16px">
+  <div style="max-width:620px;margin:0 auto;background:#FBF6EA;border:1px solid #EADBBE;border-radius:14px;padding:26px">
+    <p style="margin:0 0 18px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;font-size:11px;font-weight:bold;color:#D28E28">Lullawood · weekly</p>
+    <pre style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.65;color:#2A3422;white-space:pre-wrap;word-break:break-word">${esc(body)}</pre>
   </div>
 </body></html>`;
+  return sendEmail(to, subject, body, html);
+}
 
-  const text = [
-    subject,
-    "",
-    ...(breachLines.length ? breachLines.map((l) => `- ${l}`) : ["All checks passed — nothing breached a threshold."]),
-    ...(reportLines.length ? ["", "FULL REPORT", ...reportLines] : []),
-  ].join("\n");
-
-  return sendEmail(to, subject, text, html);
+// =============================================================================
+// Daily health-check alert — sent ONLY when something breached a threshold.
+// -----------------------------------------------------------------------------
+// Same plain instrument-panel treatment as the weekly digest: monospace, no
+// button, no marketing shell. An email arriving at all is the signal; the body
+// just has to be readable on a phone at 7am.
+// =============================================================================
+export function sendHealthAlertEmail(to: string, subject: string, body: string): Promise<EmailResult> {
+  const html = `<!doctype html><html><body style="margin:0;background:#F2EAD8;padding:28px 16px">
+  <div style="max-width:620px;margin:0 auto;background:#FBF6EA;border:1px solid #EADBBE;border-radius:14px;padding:26px">
+    <p style="margin:0 0 18px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;font-size:11px;font-weight:bold;color:#D28E28">Lullawood · health check</p>
+    <pre style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.65;color:#2A3422;white-space:pre-wrap;word-break:break-word">${esc(body)}</pre>
+  </div>
+</body></html>`;
+  return sendEmail(to, subject, body, html);
 }

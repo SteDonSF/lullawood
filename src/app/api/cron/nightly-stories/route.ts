@@ -232,18 +232,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Leave a run marker for the daily health check. Without this, "the cron
-  // didn't run" and "the cron ran and delivered nothing" look identical from
-  // the outside. Best-effort — never fail a delivered night over a log row.
+  // Leave a run marker in api_events (the same thin log /api/generate-story
+  // writes to). Without it, "the cron never fired" and "it fired and delivered
+  // nothing" are indistinguishable from the outside, and the daily health check
+  // has to report the vaguer of the two. Best-effort by contract — never fail a
+  // delivered night over a log row.
   try {
     await db.insert(schema.apiEvents).values({
-      route: "/api/cron/nightly-stories",
+      route: "cron-nightly-stories",
       status: 200,
-      outcome: "cron_run",
-      meta: { total, succeeded, failed, skipped, subscribers: subscribers.length },
+      detail: `total=${total} ok=${succeeded} failed=${failed} skipped=${skipped}`,
     });
-  } catch (err) {
-    console.error("nightly-stories: run log failed —", err instanceof Error ? err.message : String(err));
+  } catch {
+    /* the log is diagnostics, never a dependency */
   }
 
   return NextResponse.json({ ok: true, total, succeeded, failed, skipped, results });

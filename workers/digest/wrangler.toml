@@ -1,0 +1,17 @@
+name = "lullawood-weekly-digest"
+main = "index.js"
+compatibility_date = "2026-08-22"
+
+# Cron-only Worker — no public fetch surface (matches the other cron workers).
+workers_dev = false
+preview_urls = false
+
+# Monday 15:00 AND 16:00 UTC. One of those is 8am in Los Angeles depending on
+# DST; index.js checks the real Los Angeles time and the other firing exits
+# immediately. Do NOT collapse these to one line — that reintroduces the
+# twice-yearly one-hour drift.
+[triggers]
+crons = ["0 15 * * 1", "0 16 * * 1"]
+
+# Secret (do not commit) — must equal the Pages project's CRON_SECRET:
+#   cd workers/digest && npx wrangler secret put CRON_SECRET
