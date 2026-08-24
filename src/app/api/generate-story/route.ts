@@ -59,8 +59,31 @@ function splitTitle(raw: string): { title: string; story: string } {
   return { title: trimmed.slice(0, nl).trim(), story: trimmed.slice(nl).trim() };
 }
 
+// Product-health logging. Writes one row to api_events for the outcomes the
+// admin dashboard reports on — 402s, 429s, 5xx — plus a latency sample on the
+// authenticated success path. Best-effort and awaited nowhere near the response
+// path's critical section: a logging failure must never cost a parent a story.
+async function logApiEvent(
+  db: ReturnType<typeof getDb>,
+  status: number,
+  opts: { userId?: string | null; detail?: string; durationMs?: number } = {}
+): Promise<void> {
+  try {
+    await db.insert(schema.apiEvents).values({
+      route: "generate-story",
+      status,
+      durationMs: opts.durationMs ?? null,
+      userId: opts.userId ?? null,
+      detail: opts.detail ?? null,
+    });
+  } catch {
+    /* the log is diagnostics, never a dependency */
+  }
+}
+
 export async function POST(req: NextRequest) {
   const db = getDb();
+  const startedAt = Date.now();
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
 
   // ---------- MODE A: authenticated, from a saved child (+ memory) ----------
@@ -80,6 +103,7 @@ export async function POST(req: NextRequest) {
     // GATE: require an active trial or subscription to generate (Phase 5).
     const access = await getAccess(user.id);
     if (!access.hasAccess) {
+      await logApiEvent(db, 402, { userId: user.id, detail: "no_subscription" });
       return NextResponse.json(
         { error: "no_subscription", message: "Start a free trial to generate stories." },
         { status: 402 }
@@ -96,6 +120,7 @@ export async function POST(req: NextRequest) {
       );
       const used = Number((rows.rows?.[0] as any)?.n ?? 0);
       if (used >= USER_LIMIT) {
+        await logApiEvent(db, 429, { userId: user.id, detail: "user_rate_limit" });
         return NextResponse.json(
           { error: "rate_limited", message: "You've made a lot of stories in the last hour — give it a little while." },
           { status: 429 }
@@ -228,8 +253,22 @@ export async function POST(req: NextRequest) {
             }
           } catch { /* never let a save hiccup break delivery */ }
 
+          // Latency sample for the product-health panel's median. Measured to
+          // the end of generation, which is what a parent actually waits for.
+          await logApiEvent(db, 200, {
+            userId: user.id,
+            durationMs: Date.now() - startedAt,
+            detail: coStar ? "costar" : "solo",
+          });
           controller.close();
         } catch (err) {
+          // The stream broke mid-generation. The client sees a truncated story;
+          // the dashboard needs to see a failure.
+          await logApiEvent(db, 500, {
+            userId: user.id,
+            durationMs: Date.now() - startedAt,
+            detail: "stream_failed",
+          });
           try { controller.error(err); } catch { /* already closed */ }
         }
       },
@@ -256,6 +295,7 @@ export async function POST(req: NextRequest) {
     );
     const used = Number((rows.rows?.[0] as any)?.n ?? 0);
     if (used >= LIMIT) {
+      await logApiEvent(db, 429, { detail: "demo_ip_rate_limit" });
       return NextResponse.json(
         { error: "rate_limited", message: "You've created a few stories already — please try again a little later." },
         { status: 429 }

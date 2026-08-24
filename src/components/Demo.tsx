@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Mark } from "./Mark";
 import { DEMO } from "@/lib/content";
+import { track } from "@/lib/analytics";
+import { readAttribution } from "@/lib/attribution";
 
 const ANIMALS = ["Fox", "Bunny", "Dragon", "Owl", "Whale", "Lion", "Unicorn", "Bear"];
 const ADVENTURES = ["The Ocean", "Space", "Dinosaurs", "A Castle", "The Forest", "Trains", "Football", "Baking"];
@@ -307,6 +309,16 @@ export function Demo() {
   const [told, setTold] = useState<{ name: string; age: string; animal: string } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
+  // Funnel: the first keystroke in the name field is the moment a parent stops
+  // reading the page and starts trying it. Once per mount — we want the count
+  // of people who engaged, not of characters typed.
+  const demoStarted = useRef(false);
+  function noteDemoStart() {
+    if (demoStarted.current) return;
+    demoStarted.current = true;
+    track("demo_started", { source: readAttribution()?.source ?? "direct" });
+  }
+
   async function generate() {
     setLoading(true); setStreaming(false); setStreamError(false); setError(""); setStory("");
     // On mobile the story panel sits below the form — bring it into view.
@@ -350,6 +362,9 @@ export function Demo() {
       if (!acc.trim()) throw new Error("empty");
       setStory(acc);
       setStreaming(false); // stream complete -> render the paged StoryBook
+      // Fired only here: the partial-story and error paths below are NOT a
+      // completed demo, however much text made it to the screen.
+      track("demo_completed", { source: readAttribution()?.source ?? "direct" });
     } catch {
       // If usable text arrived before the break, keep it (StoryBook renders the
       // partial with a note); otherwise show the fallback error.
@@ -378,7 +393,8 @@ export function Demo() {
           <div className="flex flex-1 flex-col gap-2">
             <label htmlFor="lw-name" className="mt-2.5 text-[13px] font-bold text-ink-muted">Your child&apos;s name</label>
             <input id="lw-name" value={name} maxLength={24} placeholder="e.g. Maya"
-              onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && generate()}
+              onChange={(e) => { noteDemoStart(); setName(e.target.value); }}
+              onKeyDown={(e) => e.key === "Enter" && generate()}
               className="rounded-2xl border border-border bg-white px-4 py-3 text-[16px] font-semibold text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/30" />
           </div>
           <div className="flex w-[88px] flex-col gap-2">

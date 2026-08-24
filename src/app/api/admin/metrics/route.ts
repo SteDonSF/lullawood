@@ -1,35 +1,52 @@
+// =============================================================================
+// /api/admin/metrics  —  everything the admin dashboard renders.
+// -----------------------------------------------------------------------------
+// SECURITY: gated by requireAccess() (src/lib/access.ts) on EVERY request.
+//   This route previously had no auth check at all and was reachable
+//   unauthenticated on lullawood.pages.dev, where it served subscriber emails.
+//   See the header of access.ts for the full finding and the two-layer fix.
+// =============================================================================
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { getDb } from "@/lib/db";
+import { requireAccess } from "@/lib/access";
+import { getHealth, getChannels, getCohorts, getProductHealth, getRevenue } from "@/lib/metrics";
+import { fetchFunnel } from "@/lib/plausible";
 
 export const runtime = "edge";
 
-export async function GET() {
-  const db = getDb();
+export async function GET(req: Request) {
+  const gate = await requireAccess(req);
+  if (!gate.ok) return NextResponse.json({ error: "forbidden", reason: gate.reason }, { status: gate.status });
+
   try {
-    const [waitTotal, waitBySource, waitRecent, waitDaily, demoTotal, demoDaily, demoPicks] = await Promise.all([
-      db.execute(sql`select count(*)::int as n from waitlist`),
-      db.execute(sql`select coalesce(nullif(source,''),'unknown') as source, count(*)::int as n from waitlist group by 1 order by n desc`),
-      db.execute(sql`select email, source, created_at from waitlist order by created_at desc limit 25`),
-      db.execute(sql`select to_char(date_trunc('day', created_at),'Mon DD') as day, count(*)::int as n from waitlist where created_at > now() - interval '30 days' group by date_trunc('day', created_at) order by date_trunc('day', created_at)`),
-      db.execute(sql`select count(*)::int as n from demo_events where ok = true`),
-      db.execute(sql`select to_char(date_trunc('day', created_at),'Mon DD') as day, count(*)::int as n from demo_events where created_at > now() - interval '30 days' group by date_trunc('day', created_at) order by date_trunc('day', created_at)`),
-      db.execute(sql`select 'animal' as kind, coalesce(nullif(animal,''),'—') as val, count(*)::int as n from demo_events where ok=true group by 2 union all select 'adventure', coalesce(nullif(adventure,''),'—'), count(*)::int from demo_events where ok=true group by 2 union all select 'color', coalesce(nullif(color,''),'—'), count(*)::int from demo_events where ok=true group by 2 order by 1, n desc`),
+    // Independent queries — run them together rather than serially.
+    const [health, revenue, channels, cohorts, product, f7, f30, f90] = await Promise.all([
+      getHealth(),
+      getRevenue(),
+      getChannels(),
+      getCohorts(),
+      getProductHealth(),
+      fetchFunnel("7d"),
+      fetchFunnel("30d"),
+      fetchFunnel("90d"),
     ]);
+
     return NextResponse.json({
-      waitlist: {
-        total: (waitTotal.rows?.[0] as any)?.n ?? 0,
-        bySource: waitBySource.rows ?? [],
-        recent: waitRecent.rows ?? [],
-        daily: waitDaily.rows ?? [],
-      },
-      demo: {
-        total: (demoTotal.rows?.[0] as any)?.n ?? 0,
-        daily: demoDaily.rows ?? [],
-        picks: demoPicks.rows ?? [],
-      },
+      health,
+      revenue,
+      channels,
+      cohorts,
+      product,
+      funnel: { "7d": f7, "30d": f30, "90d": f90 },
+      viewer: gate.identity.email,
+      // Surfaced in the UI footer so it's obvious whether the assertion was
+      // cryptographically checked or merely present behind the host allowlist.
+      accessVerified: gate.identity.verified,
+      generatedAt: new Date().toISOString(),
     });
   } catch (e) {
-    return NextResponse.json({ error: "metrics_failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: "metrics_failed", detail: e instanceof Error ? e.message : String(e) },
+      { status: 500 }
+    );
   }
 }

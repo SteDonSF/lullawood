@@ -193,3 +193,20 @@ export function sendNightlyStoryEmail(
 
   return sendEmail(to, subject, text, html);
 }
+
+// =============================================================================
+// Weekly operator digest — the Monday 8am PT email.
+// -----------------------------------------------------------------------------
+// Deliberately plain: monospace, no button, no marketing shell. This is an
+// internal instrument panel, and the whole point is to read it on a phone in
+// ten seconds without opening the dashboard.
+// =============================================================================
+export function sendWeeklyDigestEmail(to: string, subject: string, body: string): Promise<EmailResult> {
+  const html = `<!doctype html><html><body style="margin:0;background:#F2EAD8;padding:28px 16px">
+  <div style="max-width:620px;margin:0 auto;background:#FBF6EA;border:1px solid #EADBBE;border-radius:14px;padding:26px">
+    <p style="margin:0 0 18px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;font-size:11px;font-weight:bold;color:#D28E28">Lullawood · weekly</p>
+    <pre style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.65;color:#2A3422;white-space:pre-wrap;word-break:break-word">${esc(body)}</pre>
+  </div>
+</body></html>`;
+  return sendEmail(to, subject, body, html);
+}

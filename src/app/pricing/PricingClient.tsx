@@ -21,6 +21,7 @@
 import { useState } from "react";
 import { TIERS, BADGE, TRUST_STRIP } from "@/lib/content";
 import { Mark } from "@/components/Mark";
+import { track } from "@/lib/analytics";
 
 type Interval = "monthly" | "yearly";
 
@@ -32,6 +33,10 @@ export default function PricingClient() {
   async function startCheckout(plan: "dreamer" | "family") {
     setError("");
     setLoading(plan);
+    // Fired on the click, not on the redirect: once we hand the tab to Stripe
+    // the beacon is racing a cross-origin navigation, and a dropped event would
+    // silently understate the top of the paid funnel.
+    track("checkout_started", { plan, interval });
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",

@@ -8,6 +8,13 @@ export const user = pgTable("user", {
   image: text("image"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  // First-touch UTM attribution (see src/lib/attribution.ts). Captured in the
+  // browser on the first visit that carries a ?utm_source, then written here
+  // ONCE at signup completion via /api/attribution — never overwritten.
+  // Rows that predate this feature are backfilled to 'pre-tracking'.
+  signupSource: text("signup_source"),
+  signupCampaign: text("signup_campaign"),
+  signupLanding: text("signup_landing"),
 });
 
 export const session = pgTable("session", {
