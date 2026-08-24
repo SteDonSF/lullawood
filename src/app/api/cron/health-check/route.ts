@@ -1,11 +1,15 @@
 // =============================================================================
 // /api/cron/health-check  —  the daily "is anything broken?" run
 // -----------------------------------------------------------------------------
-// WHAT: six checks against the live site, Plausible, and the database. Emails
+// WHAT: eight checks against the live site, Plausible, and the database. Emails
 //   ONE message listing every breach — and nothing at all when nothing breached.
 //   Silence is the feature: an email in the inbox always means "look at this".
-// TRIGGER: the lullawood-healthcheck Worker (workers/healthcheck) owns the cron
-//   and fires this at 14:00 UTC / 7am PT.
+// TRIGGER: the lullawood-healthcheck Worker (workers/healthcheck) owns both
+//   crons and fires this twice a day:
+//     14:00 UTC (7am PT)  ->  ?mode=daily     checks 1-7, incl. the canary
+//     19:00 UTC           ->  ?mode=delivery  check 8, AFTER the 18:00 nightly
+//   The split is the whole point: at 14:00 tonight's stories don't exist yet, so
+//   running the delivery check then would flag every child, every day.
 // SECURITY: same pattern as the weekly digest and the other cron routes —
 //   Authorization: Bearer <CRON_SECRET>, 401 on any mismatch. Not behind
 //   Cloudflare Access, because a Worker cannot pass an Access check; the shared
@@ -25,7 +29,7 @@
 // =============================================================================
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, schema } from "@/lib/db";
-import { getGenerationErrors, getNightlyCronHealth } from "@/lib/metrics";
+import { getDeliveryVerification, getGenerationErrors, getNightlyCronHealth } from "@/lib/metrics";
 import { fetchVisitors, lastHours, plausibleConfigured } from "@/lib/plausible";
 import { sendHealthAlertEmail } from "@/lib/resend";
 
@@ -83,6 +87,28 @@ const CONFIG = {
   // --- 5. CRON HEALTH (nightly story delivery) ---
   cron: {
     windowHours: 26,             // the 18:00 UTC nightly run + slack, seen from a 14:00 UTC check
+  },
+
+  // --- 7. SYNTHETIC CANARY (runs with the 14:00 daily set) ---
+  // Exercises the REAL path end to end — generation, DB write, Resend send — by
+  // calling the nightly cron's own test hooks (?force=1&childId=) rather than
+  // reimplementing any of it. Whatever breaks for a canary breaks for a customer.
+  // Needs a dedicated child on an account with an active/trialing subscription,
+  // whose parent email is a canary inbox. Unset -> the check skips, never alerts.
+  canary: {
+    childId: process.env.CANARY_CHILD_ID || "",
+    maxMs: 60_000,               // ALERT above this, end to end
+    abortMs: 90_000,             // ...but let it finish past the threshold so the
+                                 // alert can name a real duration, not "timed out"
+  },
+
+  // --- 8. STORY DELIVERY (runs at 19:00 UTC, after the nightly job) ---
+  delivery: {
+    // Hour of the nightly run, UTC. Used to exclude children created after
+    // tonight's run started — an evening signup has no story yet and is not a
+    // failure. Keep in step with workers/nightly/wrangler.toml.
+    nightlyHourUtc: 18,
+    maxFailuresListed: 25,       // one line each; a full outage shouldn't email 400
   },
 
   // --- 6. ERROR RATE (api_events, route 'generate-story') ---
@@ -465,6 +491,124 @@ async function checkErrorRate(): Promise<CheckResult> {
 }
 
 // =============================================================================
+// 7. SYNTHETIC CANARY — generate and send one real story, end to end.
+//    Calls the nightly cron's own secret-gated test hooks instead of
+//    reimplementing generation: ?childId= confines the run to the canary child
+//    (no collateral email to anyone else) and ?force=1 bypasses the once-a-day
+//    idempotency so it actually generates rather than skipping.
+// =============================================================================
+async function checkCanary(secret: string): Promise<CheckResult> {
+  const name = "Synthetic canary";
+  const { childId, maxMs, abortMs } = CONFIG.canary;
+  if (!childId) {
+    return { name, status: "skipped", detail: "skipped — CANARY_CHILD_ID is not set", breaches: [] };
+  }
+
+  const target = `${CONFIG.site}/api/cron/nightly-stories`;
+  const url = `${target}?force=1&childId=${encodeURIComponent(childId)}`;
+  const started = Date.now();
+
+  const fail = (value: string, elapsed: number): CheckResult => ({
+    name,
+    status: "alert",
+    detail: `FAILED after ${secs(elapsed)} — ${value}`,
+    breaches: [{ metric: "Canary story (generate + save + send)", value, threshold: `must succeed within ${secs(maxMs)}`, target }],
+  });
+
+  let elapsed = 0;
+  try {
+    const res = await fetchWithTimeout(url, { headers: { authorization: `Bearer ${secret}` } }, abortMs);
+    elapsed = Date.now() - started;
+
+    if (!res.ok) return fail(`HTTP ${res.status} from the nightly route`, elapsed);
+
+    const body = (await res.json()) as any;
+    // total 0 means the child wasn't reachable at all — wrong id, inactive
+    // child, or the canary account's subscription lapsed. All are real breaks.
+    if (!body?.ok) return fail(`nightly route returned ok=false (${body?.error ?? "no reason given"})`, elapsed);
+    if (Number(body.total ?? 0) === 0) {
+      return fail("canary child not found on any active/trialing subscription", elapsed);
+    }
+    if (Number(body.succeeded ?? 0) < 1) {
+      const why = body?.results?.[0]?.error ?? "no reason given";
+      return fail(`generation failed — ${String(why).slice(0, 160)}`, elapsed);
+    }
+    const emailError = body?.results?.[0]?.emailError;
+    if (emailError) return fail(`story generated but the send failed — ${String(emailError).slice(0, 160)}`, elapsed);
+
+    // Generated and sent. The only thing left to judge is how long it took.
+    if (elapsed > maxMs) {
+      return {
+        name,
+        status: "alert",
+        detail: `succeeded, but in ${secs(elapsed)}`,
+        breaches: [{ metric: "Canary end-to-end duration", value: secs(elapsed), threshold: `${secs(maxMs)} max`, target }],
+      };
+    }
+
+    return { name, status: "pass", detail: `generated, saved and sent in ${secs(elapsed)}`, breaches: [] };
+  } catch (e) {
+    elapsed = Date.now() - started;
+    // An abort here means it blew well past the threshold, not that we can't tell.
+    const why = elapsed >= abortMs ? `no response within ${secs(abortMs)}` : msg(e);
+    return fail(why, elapsed);
+  }
+}
+
+// =============================================================================
+// 8. STORY DELIVERY — every child on an active sub got a story AND a send id.
+//    Runs at 19:00 UTC, after the 18:00 nightly. A story row alone isn't
+//    delivery: this fails a child whose story exists but was never mailed.
+// =============================================================================
+async function checkDelivery(): Promise<CheckResult> {
+  const name = "Story delivery";
+  const { nightlyHourUtc, maxFailuresListed } = CONFIG.delivery;
+  const target = "/api/cron/nightly-stories";
+
+  try {
+    const { expected, verified, failures, truncated } = await getDeliveryVerification(nightlyHourUtc, maxFailuresListed);
+
+    if (expected === 0) {
+      return { name, status: "pass", detail: "no children on an active subscription tonight", breaches: [] };
+    }
+
+    // One line per child, naming which half failed — a missing story and a
+    // story that never got mailed are different bugs in different places.
+    const breaches: Breach[] = failures.map((f) => ({
+      metric: `Delivery — ${f.childName}`,
+      value: !f.hasStory
+        ? "no story written tonight"
+        : "story written but no Resend id logged",
+      threshold: "story + send id",
+      target: `${f.parentEmail} (child ${f.childId})`,
+    }));
+
+    if (truncated) {
+      breaches.push({
+        metric: "Delivery failures",
+        value: `${expected - verified} total, first ${maxFailuresListed} listed`,
+        threshold: "all children delivered",
+        target,
+      });
+    }
+
+    return {
+      name,
+      status: breaches.length ? "alert" : "pass",
+      detail: `${verified}/${expected} children verified (story + Resend id)`,
+      breaches,
+    };
+  } catch (e) {
+    return {
+      name,
+      status: "error",
+      detail: `query failed — ${msg(e)}`,
+      breaches: [{ metric: "Delivery check", value: `could not run — ${msg(e)}`, threshold: "query must succeed", target }],
+    };
+  }
+}
+
+// =============================================================================
 // The run.
 // =============================================================================
 export async function GET(req: NextRequest) {
@@ -474,20 +618,43 @@ export async function GET(req: NextRequest) {
   const provided = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (provided !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const dry = new URL(req.url).searchParams.get("dry") === "1";
+  const params = new URL(req.url).searchParams;
+  const dry = params.get("dry") === "1";
+
+  // TWO SCHEDULES, ONE ROUTE. The daily set runs at 14:00 UTC. The delivery
+  // check runs at 19:00, an hour after the nightly job — at 14:00 tonight's
+  // stories don't exist yet, so it would flag every child, every day.
+  //   (default)        -> checks 1-7
+  //   ?mode=delivery   -> check 8 only
+  //   ?mode=all        -> everything, for an on-demand look after 19:00
+  const mode = (params.get("mode") || "daily").toLowerCase();
+  if (!["daily", "delivery", "all"].includes(mode)) {
+    return NextResponse.json({ error: "bad_mode", allowed: ["daily", "delivery", "all"] }, { status: 400 });
+  }
+  const runDaily = mode === "daily" || mode === "all";
+  const runDelivery = mode === "delivery" || mode === "all";
+
   const startedAt = Date.now();
   const db = getDb();
 
   // Every check is independent — run them together and let each own its errors,
-  // so one failing check can never hide the other five.
-  const checks = await Promise.all([
-    checkPageSpeed(db),
-    checkUptime(),
-    checkFunnel(),
-    checkConversionDrought(),
-    checkCronHealth(),
-    checkErrorRate(),
-  ]);
+  // so one failing check can never hide the others.
+  const checks = (
+    await Promise.all([
+      ...(runDaily
+        ? [
+            checkPageSpeed(db),
+            checkUptime(),
+            checkFunnel(),
+            checkConversionDrought(),
+            checkCronHealth(),
+            checkErrorRate(),
+            checkCanary(secret),
+          ]
+        : []),
+      ...(runDelivery ? [checkDelivery()] : []),
+    ])
+  );
 
   const breaches = checks.flatMap((c) => c.breaches);
   const lines = breaches.map(breachLine);
@@ -499,7 +666,7 @@ export async function GET(req: NextRequest) {
 
   const stamp = new Date().toISOString().replace("T", " ").slice(0, 16);
   const body = [
-    `Lullawood — health check ${stamp} UTC`,
+    `Lullawood — health check ${stamp} UTC (${mode})`,
     "",
     ...(breaches.length ? lines.map((l) => `- ${l}`) : ["Nothing breached a threshold."]),
     // The real alert is the breach list alone. A ?dry=1 run also carries the
@@ -527,16 +694,17 @@ export async function GET(req: NextRequest) {
       route: "cron-health-check",
       status: 200,
       durationMs,
-      detail: `breaches=${breaches.length}${dry ? " dry=1" : ""}${emailed ? " emailed" : ""}`,
+      detail: `mode=${mode} breaches=${breaches.length}${dry ? " dry=1" : ""}${emailed ? " emailed" : ""}`,
     });
   } catch {
     /* the log is diagnostics, never a dependency */
   }
 
-  console.log(`health-check: ${breaches.length} breach(es) in ${durationMs}ms${dry ? " (dry)" : ""}${emailed ? " — emailed" : ""}`);
+  console.log(`health-check[${mode}]: ${breaches.length} breach(es) in ${durationMs}ms${dry ? " (dry)" : ""}${emailed ? " — emailed" : ""}`);
 
   return NextResponse.json({
     ok: true,
+    mode,
     dry,
     durationMs,
     breachCount: breaches.length,

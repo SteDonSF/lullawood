@@ -224,6 +224,32 @@ export async function GET(req: NextRequest) {
         const firstName = (sub.name || "").trim().split(/\s+/)[0] || "there";
         const emailName = coStar ? `${child.name} & ${coStar.name}` : child.name;
         const emailRes = await sendNightlyStoryEmail(sub.email, firstName, emailName, finalTitle, story, dashboardUrl);
+
+        // PROOF OF DELIVERY. Logging that the cron ran says nothing about whether
+        // mail left the building — this records Resend's message id, which is the
+        // first point at which the send is somebody else's problem. One row per
+        // child, so a co-star night (ONE email, TWO heroes) satisfies both
+        // children and the delivery check doesn't cry wolf over the sibling.
+        // status 200 = accepted with an id; 502 = Resend refused it. Best-effort
+        // by contract: never fail a delivered story over a log row.
+        const covered = coStar ? [child.id, coStar.id] : [child.id];
+        for (const cid of covered) {
+          try {
+            await db.insert(schema.apiEvents).values({
+              route: "nightly-delivery",
+              status: emailRes.success ? 200 : 502,
+              userId: sub.userId,
+              detail: emailRes.success
+                // 'missing' is deliberate and distinguishable: Resend said OK but
+                // handed back no id, so there is nothing to trace the mail with.
+                ? `child=${cid} resend=${emailRes.id ?? "missing"}`
+                : `child=${cid} error=${(emailRes.error ?? "unknown").slice(0, 120)}`,
+            });
+          } catch {
+            /* the log is diagnostics, never a dependency */
+          }
+        }
+
         results.push({ userId: sub.userId, childId: child.id, success: true, emailError: emailRes.success ? undefined : emailRes.error });
       } catch (err) {
         failed += 1;

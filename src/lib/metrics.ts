@@ -899,3 +899,94 @@ export async function getNightlyCronHealth(windowHours: number): Promise<Nightly
 
   return { runs: num(r.runs), delivered: num(r.delivered), activeSubscriptions: num(r.active_subs) };
 }
+
+export type UndeliveredChild = {
+  childId: string;
+  childName: string;
+  parentEmail: string;
+  hasStory: boolean;
+  hasSendId: boolean;
+};
+
+export type DeliveryVerification = {
+  /** Children that should have received a story tonight. */
+  expected: number;
+  /** Of those, how many have both a story row and a logged Resend id. */
+  verified: number;
+  /** The ones that don't. Capped — a total outage shouldn't produce 400 lines. */
+  failures: UndeliveredChild[];
+  /** True when failures was truncated, so the caller can say so. */
+  truncated: boolean;
+};
+
+/**
+ * Did tonight's stories actually reach people?
+ *
+ * "Delivered" means BOTH halves: a nightly story row exists for today, AND the
+ * nightly cron logged a Resend message id for that child. A story in the
+ * database that never got mailed is the exact failure this catches, and the
+ * cron-ran marker cannot see it.
+ *
+ * nightlyHourUtc gates out children created AFTER tonight's run started — a
+ * parent who signs up at 19:30 has no story yet and is not a failure. Without
+ * this the check would cry wolf on every evening signup.
+ *
+ * Run this AFTER the nightly window. Called at 19:00 UTC, an hour past the
+ * 18:00 run; calling it at 14:00 would flag everyone, every day.
+ */
+export async function getDeliveryVerification(
+  nightlyHourUtc: number,
+  maxFailures = 25
+): Promise<DeliveryVerification> {
+  const db = getDb();
+  const hour = sql.raw(String(Math.trunc(nightlyHourUtc)));
+
+  const found = rows(
+    await db.execute(sql`
+      with today as (select date_trunc('day', now()) as start)
+      select
+        c.id::text as child_id,
+        c.name     as child_name,
+        u.email    as parent_email,
+        exists (
+          select 1 from stories s
+          where s.child_id = c.id
+            and s.is_nightly = true
+            and s.created_at >= (select start from today)
+        ) as has_story,
+        exists (
+          select 1 from api_events e
+          where e.route = 'nightly-delivery'
+            and e.status = 200
+            and e.created_at >= (select start from today)
+            and e.detail like '%child=' || c.id::text || '%'
+            and e.detail not like '%resend=missing%'
+        ) as has_send_id
+      from children c
+      join subscriptions sub on sub.user_id = c.parent_id
+      join "user" u on u.id = c.parent_id
+      where c.active = true
+        and sub.status in ('active','trialing')
+        -- Only children that existed when tonight's run started.
+        and c.created_at < (select start from today) + interval '${hour} hours'
+      order by c.name
+    `)
+  );
+
+  const failures = found
+    .filter((r) => !(r.has_story && r.has_send_id))
+    .map((r) => ({
+      childId: String(r.child_id ?? ""),
+      childName: String(r.child_name ?? ""),
+      parentEmail: String(r.parent_email ?? ""),
+      hasStory: Boolean(r.has_story),
+      hasSendId: Boolean(r.has_send_id),
+    }));
+
+  return {
+    expected: found.length,
+    verified: found.length - failures.length,
+    failures: failures.slice(0, maxFailures),
+    truncated: failures.length > maxFailures,
+  };
+}

@@ -3,18 +3,28 @@ main = "index.js"
 compatibility_date = "2026-08-24"
 
 # Cron-only Worker — no public fetch surface. Disable the workers.dev route and
-# preview URLs so it's reachable only by its Cron Trigger.
+# preview URLs so it's reachable only by its Cron Triggers.
 workers_dev = false
 preview_urls = false
 
-# 14:00 UTC daily = 7am PT while daylight saving is in effect (6am PST in winter
-# — cron triggers are UTC and don't shift). The report is waiting when the day
-# starts, and the
-# 24h/48h windows it measures cover yesterday plus last night's nightly run.
-# The route is read-only apart from its page_speed + api_events rows, so a
-# re-run never double-sends anything to a customer.
+# TWO triggers, and the gap between them is deliberate:
+#
+#   0 14 * * *  ->  ?mode=daily     page speed, uptime, funnel, conversion,
+#                                   cron health, error rate, synthetic canary.
+#                                   14:00 UTC = 7am PT in summer, 6am PST in
+#                                   winter (cron triggers are UTC and don't
+#                                   follow daylight saving).
+#
+#   0 19 * * *  ->  ?mode=delivery  did every child on an active subscription
+#                                   actually get a story AND a Resend id?
+#                                   An hour after the 18:00 UTC nightly run —
+#                                   at 14:00 tonight's stories don't exist yet,
+#                                   so this would flag everyone, every day.
+#
+# index.js maps each cron expression to its mode. Change an hour here and the
+# matching string in index.js must change with it.
 [triggers]
-crons = ["0 14 * * *"]
+crons = ["0 14 * * *", "0 19 * * *"]
 
 # Secret (do not commit) — must equal the Pages project's CRON_SECRET:
 #   cd workers/healthcheck && npx wrangler secret put CRON_SECRET
